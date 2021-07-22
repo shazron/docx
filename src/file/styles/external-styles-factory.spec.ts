@@ -62,19 +62,14 @@ describe("External styles factory", () => {
             // tslint:disable-next-line:no-any
             const importedStyle = new ExternalStylesFactory().newInstance(externalStyles) as any;
             expect(importedStyle.root[1]).to.deep.equal({
-                deleted: false,
                 root: [
                     {
-                        deleted: false,
                         root: [
                             {
-                                deleted: false,
                                 root: [
                                     {
-                                        deleted: false,
                                         root: [
                                             {
-                                                deleted: false,
                                                 root: {
                                                     "w:ascii": "Arial",
                                                     "w:cstheme": "minorHAnsi",
@@ -87,10 +82,8 @@ describe("External styles factory", () => {
                                         rootKey: "w:rFonts",
                                     },
                                     {
-                                        deleted: false,
                                         root: [
                                             {
-                                                deleted: false,
                                                 root: {
                                                     "w:bidi": "ar-SA",
                                                     "w:eastAsia": "en-US",
@@ -108,16 +101,12 @@ describe("External styles factory", () => {
                         rootKey: "w:rPrDefault",
                     },
                     {
-                        deleted: false,
                         root: [
                             {
-                                deleted: false,
                                 root: [
                                     {
-                                        deleted: false,
                                         root: [
                                             {
-                                                deleted: false,
                                                 root: {
                                                     "w:after": "160",
                                                     "w:line": "259",
@@ -138,10 +127,8 @@ describe("External styles factory", () => {
                 rootKey: "w:docDefaults",
             });
             expect(importedStyle.root[2]).to.deep.equal({
-                deleted: false,
                 root: [
                     {
-                        deleted: false,
                         root: {
                             "w:defLockedState": "1",
                             "w:defUIPriority": "99",
@@ -153,16 +140,20 @@ describe("External styles factory", () => {
             });
         });
 
+        it("should throw when style element isn't found", () => {
+            expect(() => new ExternalStylesFactory().newInstance(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><foo/>`)).to.throw(
+                "can not find styles element",
+            );
+        });
+
         it("should parse styles elements", () => {
             // tslint:disable-next-line:no-any
             const importedStyle = new ExternalStylesFactory().newInstance(externalStyles) as any;
 
             expect(importedStyle.root.length).to.equal(5);
             expect(importedStyle.root[3]).to.deep.equal({
-                deleted: false,
                 root: [
                     {
-                        deleted: false,
                         root: {
                             "w:default": "1",
                             "w:styleId": "Normal",
@@ -171,10 +162,8 @@ describe("External styles factory", () => {
                         rootKey: "_attr",
                     },
                     {
-                        deleted: false,
                         root: [
                             {
-                                deleted: false,
                                 root: {
                                     "w:val": "Normal",
                                 },
@@ -184,7 +173,6 @@ describe("External styles factory", () => {
                         rootKey: "w:name",
                     },
                     {
-                        deleted: false,
                         root: [],
                         rootKey: "w:qFormat",
                     },
@@ -193,10 +181,8 @@ describe("External styles factory", () => {
             });
 
             expect(importedStyle.root[4]).to.deep.equal({
-                deleted: false,
                 root: [
                     {
-                        deleted: false,
                         root: {
                             "w:styleId": "Heading1",
                             "w:type": "paragraph",
@@ -204,10 +190,8 @@ describe("External styles factory", () => {
                         rootKey: "_attr",
                     },
                     {
-                        deleted: false,
                         root: [
                             {
-                                deleted: false,
                                 root: {
                                     "w:val": "heading 1",
                                 },
@@ -217,10 +201,8 @@ describe("External styles factory", () => {
                         rootKey: "w:name",
                     },
                     {
-                        deleted: false,
                         root: [
                             {
-                                deleted: false,
                                 root: {
                                     "w:val": "Normal",
                                 },
@@ -230,26 +212,20 @@ describe("External styles factory", () => {
                         rootKey: "w:basedOn",
                     },
                     {
-                        deleted: false,
                         root: [
                             {
-                                deleted: false,
                                 root: [],
                                 rootKey: "w:keepNext",
                             },
                             {
-                                deleted: false,
                                 root: [],
                                 rootKey: "w:keepLines",
                             },
                             {
-                                deleted: false,
                                 root: [
                                     {
-                                        deleted: false,
                                         root: [
                                             {
-                                                deleted: false,
                                                 root: {
                                                     "w:color": "auto",
                                                     "w:space": "1",

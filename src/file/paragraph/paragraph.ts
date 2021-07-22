@@ -6,11 +6,11 @@ import { IContext, IXmlableObject, XmlComponent } from "file/xml-components";
 
 import { TargetModeType } from "../relationships/relationship/relationship";
 import { DeletedTextRun, InsertedTextRun } from "../track-revision";
-import { PageBreak } from "./formatting/page-break";
+import { ColumnBreak, PageBreak } from "./formatting/break";
 import { Bookmark, ConcreteHyperlink, ExternalHyperlink, InternalHyperlink } from "./links";
 import { Math } from "./math";
 import { IParagraphPropertiesOptions, ParagraphProperties } from "./properties";
-import { ImageRun, Run, SequentialIdentifier, SymbolRun, TextRun } from "./run";
+import { ImageRun, Run, SequentialIdentifier, SimpleField, SimpleMailMergeField, SymbolRun, TextRun } from "./run";
 
 export type ParagraphChild =
     | TextRun
@@ -18,13 +18,16 @@ export type ParagraphChild =
     | SymbolRun
     | Bookmark
     | PageBreak
+    | ColumnBreak
     | SequentialIdentifier
     | FootnoteReferenceRun
     | InternalHyperlink
     | ExternalHyperlink
     | InsertedTextRun
     | DeletedTextRun
-    | Math;
+    | Math
+    | SimpleField
+    | SimpleMailMergeField;
 
 export interface IParagraphOptions extends IParagraphPropertiesOptions {
     readonly text?: string;
@@ -41,7 +44,7 @@ export class Paragraph extends XmlComponent {
             this.properties = new ParagraphProperties({});
             this.root.push(this.properties);
             this.root.push(new TextRun(options));
-            return;
+            return this;
         }
 
         this.properties = new ParagraphProperties(options);

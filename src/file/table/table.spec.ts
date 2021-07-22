@@ -5,58 +5,21 @@ import { Formatter } from "export/formatter";
 
 import { AlignmentType, Paragraph } from "../paragraph";
 import { Table } from "./table";
-// import { WidthType } from "./table-cell";
 import { RelativeHorizontalPosition, RelativeVerticalPosition, TableAnchorType } from "./table-properties";
 
-import { TableCell, WidthType } from "./table-cell";
+import { TableCell } from "./table-cell";
 import { TableLayoutType } from "./table-properties/table-layout";
 import { TableRow } from "./table-row";
-
-const DEFAULT_TABLE_PROPERTIES = {
-    "w:tblCellMar": [
-        {
-            "w:bottom": {
-                _attr: {
-                    "w:type": "auto",
-                    "w:w": 0,
-                },
-            },
-        },
-        {
-            "w:top": {
-                _attr: {
-                    "w:type": "auto",
-                    "w:w": 0,
-                },
-            },
-        },
-        {
-            "w:left": {
-                _attr: {
-                    "w:type": "auto",
-                    "w:w": 0,
-                },
-            },
-        },
-        {
-            "w:right": {
-                _attr: {
-                    "w:type": "auto",
-                    "w:w": 0,
-                },
-            },
-        },
-    ],
-};
+import { WidthType } from "./table-width";
 
 const BORDERS = {
     "w:tblBorders": [
-        { "w:top": { _attr: { "w:val": "single", "w:sz": 4, "w:space": 0, "w:color": "auto" } } },
-        { "w:left": { _attr: { "w:val": "single", "w:sz": 4, "w:space": 0, "w:color": "auto" } } },
-        { "w:bottom": { _attr: { "w:val": "single", "w:sz": 4, "w:space": 0, "w:color": "auto" } } },
-        { "w:right": { _attr: { "w:val": "single", "w:sz": 4, "w:space": 0, "w:color": "auto" } } },
-        { "w:insideH": { _attr: { "w:val": "single", "w:sz": 4, "w:space": 0, "w:color": "auto" } } },
-        { "w:insideV": { _attr: { "w:val": "single", "w:sz": 4, "w:space": 0, "w:color": "auto" } } },
+        { "w:top": { _attr: { "w:val": "single", "w:sz": 4, "w:color": "auto" } } },
+        { "w:left": { _attr: { "w:val": "single", "w:sz": 4, "w:color": "auto" } } },
+        { "w:bottom": { _attr: { "w:val": "single", "w:sz": 4, "w:color": "auto" } } },
+        { "w:right": { _attr: { "w:val": "single", "w:sz": 4, "w:color": "auto" } } },
+        { "w:insideH": { _attr: { "w:val": "single", "w:sz": 4, "w:color": "auto" } } },
+        { "w:insideV": { _attr: { "w:val": "single", "w:sz": 4, "w:color": "auto" } } },
     ],
 };
 
@@ -177,7 +140,7 @@ describe("Table", () => {
             };
             expect(tree).to.deep.equal({
                 "w:tbl": [
-                    { "w:tblPr": [DEFAULT_TABLE_PROPERTIES, BORDERS, WIDTHS] },
+                    { "w:tblPr": [WIDTHS, BORDERS] },
                     {
                         "w:tblGrid": [{ "w:gridCol": { _attr: { "w:w": 100 } } }, { "w:gridCol": { _attr: { "w:w": 100 } } }],
                     },
@@ -223,7 +186,7 @@ describe("Table", () => {
             const cellP = { "w:p": [{ "w:r": [{ "w:t": [{ _attr: { "xml:space": "preserve" } }, "hello"] }] }] };
             expect(tree).to.deep.equal({
                 "w:tbl": [
-                    { "w:tblPr": [DEFAULT_TABLE_PROPERTIES, BORDERS, WIDTHS] },
+                    { "w:tblPr": [WIDTHS, BORDERS] },
                     {
                         "w:tblGrid": [{ "w:gridCol": { _attr: { "w:w": 100 } } }, { "w:gridCol": { _attr: { "w:w": 100 } } }],
                     },
@@ -270,7 +233,7 @@ describe("Table", () => {
             const tree = new Formatter().format(table);
             expect(tree).to.have.property("w:tbl").which.is.an("array").with.has.length.at.least(1);
             expect(tree["w:tbl"][0]).to.deep.equal({
-                "w:tblPr": [DEFAULT_TABLE_PROPERTIES, BORDERS, WIDTHS, { "w:tblLayout": { _attr: { "w:type": "fixed" } } }],
+                "w:tblPr": [WIDTHS, BORDERS, { "w:tblLayout": { _attr: { "w:type": "fixed" } } }],
             });
         });
 
@@ -290,7 +253,7 @@ describe("Table", () => {
             const tree = new Formatter().format(table);
             expect(tree).to.have.property("w:tbl").which.is.an("array").with.has.length.at.least(1);
             expect(tree["w:tbl"][0]).to.deep.equal({
-                "w:tblPr": [DEFAULT_TABLE_PROPERTIES, BORDERS, WIDTHS, { "w:jc": { _attr: { "w:val": "center" } } }],
+                "w:tblPr": [WIDTHS, { "w:jc": { _attr: { "w:val": "center" } } }, BORDERS],
             });
         });
 
@@ -315,16 +278,15 @@ describe("Table", () => {
             expect(tree).to.have.property("w:tbl").which.is.an("array").with.has.length.at.least(1);
             expect(tree["w:tbl"][0]).to.deep.equal({
                 "w:tblPr": [
-                    DEFAULT_TABLE_PROPERTIES,
-                    BORDERS,
                     {
                         "w:tblW": {
                             _attr: {
                                 "w:type": "pct",
-                                "w:w": "100%",
+                                "w:w": 100,
                             },
                         },
                     },
+                    BORDERS,
                     { "w:tblLayout": { _attr: { "w:type": "fixed" } } },
                 ],
             });
@@ -477,9 +439,6 @@ describe("Table", () => {
             expect(tree).to.have.property("w:tbl").which.is.an("array").with.has.length.at.least(1);
             expect(tree["w:tbl"][0]).to.deep.equal({
                 "w:tblPr": [
-                    DEFAULT_TABLE_PROPERTIES,
-                    BORDERS,
-                    WIDTHS,
                     {
                         "w:tblpPr": {
                             _attr: {
@@ -496,6 +455,8 @@ describe("Table", () => {
                             },
                         },
                     },
+                    WIDTHS,
+                    BORDERS,
                 ],
             });
         });

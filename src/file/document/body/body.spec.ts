@@ -3,6 +3,7 @@ import { expect } from "chai";
 import { Formatter } from "export/formatter";
 
 import { Body } from "./body";
+import { sectionMarginDefaults } from "./section-properties";
 
 describe("Body", () => {
     let body: Body;
@@ -32,24 +33,23 @@ describe("Body", () => {
                             {
                                 "w:pgMar": {
                                     _attr: {
-                                        "w:top": 1440,
-                                        "w:right": 1440,
-                                        "w:bottom": 1440,
-                                        "w:left": 1440,
-                                        "w:header": 708,
-                                        "w:footer": 708,
-                                        "w:gutter": 0,
-                                        "w:mirrorMargins": false,
+                                        "w:top": sectionMarginDefaults.TOP,
+                                        "w:right": sectionMarginDefaults.RIGHT,
+                                        "w:bottom": sectionMarginDefaults.BOTTOM,
+                                        "w:left": sectionMarginDefaults.LEFT,
+                                        "w:header": sectionMarginDefaults.HEADER,
+                                        "w:footer": sectionMarginDefaults.FOOTER,
+                                        "w:gutter": sectionMarginDefaults.GUTTER,
                                     },
                                 },
                             },
-                            { "w:cols": { _attr: { "w:space": 708, "w:sep": false, "w:num": 1 } } },
-                            { "w:docGrid": { _attr: { "w:linePitch": 360 } } },
                             {
                                 "w:pgNumType": {
                                     _attr: {},
                                 },
                             },
+                            // { "w:cols": { _attr: { "w:space": 708, "w:sep": false, "w:num": 1 } } },
+                            { "w:docGrid": { _attr: { "w:linePitch": 360 } } },
                         ],
                     },
                 ],

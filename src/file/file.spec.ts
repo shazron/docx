@@ -1,10 +1,17 @@
 import { expect } from "chai";
 
 import { Formatter } from "export/formatter";
+import { sectionMarginDefaults, sectionPageSizeDefaults } from "./document";
 
 import { File } from "./file";
 import { Footer, Header } from "./header";
 import { Paragraph } from "./paragraph";
+
+const PAGE_SIZE_DEFAULTS = {
+    "w:h": sectionPageSizeDefaults.HEIGHT,
+    "w:orient": sectionPageSizeDefaults.ORIENTATION,
+    "w:w": sectionPageSizeDefaults.WIDTH,
+};
 
 describe("File", () => {
     describe("#constructor", () => {
@@ -25,8 +32,8 @@ describe("File", () => {
 
             const tree = new Formatter().format(doc.Document.View.Body);
 
-            expect(tree["w:body"][0]["w:sectPr"][4]["w:headerReference"]._attr["w:type"]).to.equal("default");
-            expect(tree["w:body"][0]["w:sectPr"][5]["w:footerReference"]._attr["w:type"]).to.equal("default");
+            expect(tree["w:body"][0]["w:sectPr"][0]["w:headerReference"]._attr["w:type"]).to.equal("default");
+            expect(tree["w:body"][0]["w:sectPr"][1]["w:footerReference"]._attr["w:type"]).to.equal("default");
         });
 
         it("should create with first headers and footers", () => {
@@ -45,8 +52,8 @@ describe("File", () => {
             });
 
             const tree = new Formatter().format(doc.Document.View.Body);
-            expect(tree["w:body"][0]["w:sectPr"][4]["w:headerReference"]._attr["w:type"]).to.equal("first");
-            expect(tree["w:body"][0]["w:sectPr"][5]["w:footerReference"]._attr["w:type"]).to.equal("first");
+            expect(tree["w:body"][0]["w:sectPr"][0]["w:headerReference"]._attr["w:type"]).to.equal("first");
+            expect(tree["w:body"][0]["w:sectPr"][1]["w:footerReference"]._attr["w:type"]).to.equal("first");
         });
 
         it("should create with correct headers", () => {
@@ -70,13 +77,13 @@ describe("File", () => {
 
             const tree = new Formatter().format(doc.Document.View.Body);
 
-            expect(tree["w:body"][0]["w:sectPr"][4]["w:headerReference"]._attr["w:type"]).to.equal("default");
-            expect(tree["w:body"][0]["w:sectPr"][5]["w:headerReference"]._attr["w:type"]).to.equal("first");
-            expect(tree["w:body"][0]["w:sectPr"][6]["w:headerReference"]._attr["w:type"]).to.equal("even");
+            expect(tree["w:body"][0]["w:sectPr"][0]["w:headerReference"]._attr["w:type"]).to.equal("default");
+            expect(tree["w:body"][0]["w:sectPr"][1]["w:headerReference"]._attr["w:type"]).to.equal("first");
+            expect(tree["w:body"][0]["w:sectPr"][2]["w:headerReference"]._attr["w:type"]).to.equal("even");
 
-            expect(tree["w:body"][0]["w:sectPr"][7]["w:footerReference"]._attr["w:type"]).to.equal("default");
-            expect(tree["w:body"][0]["w:sectPr"][8]["w:footerReference"]._attr["w:type"]).to.equal("first");
-            expect(tree["w:body"][0]["w:sectPr"][9]["w:footerReference"]._attr["w:type"]).to.equal("even");
+            expect(tree["w:body"][0]["w:sectPr"][3]["w:footerReference"]._attr["w:type"]).to.equal("default");
+            expect(tree["w:body"][0]["w:sectPr"][4]["w:footerReference"]._attr["w:type"]).to.equal("first");
+            expect(tree["w:body"][0]["w:sectPr"][5]["w:footerReference"]._attr["w:type"]).to.equal("even");
         });
 
         it("should add child", () => {
@@ -114,40 +121,19 @@ describe("File", () => {
                         "w:sectPr": [
                             {
                                 "w:pgSz": {
-                                    _attr: {
-                                        "w:h": 16838,
-                                        "w:orient": "portrait",
-                                        "w:w": 11906,
-                                    },
+                                    _attr: PAGE_SIZE_DEFAULTS,
                                 },
                             },
                             {
                                 "w:pgMar": {
                                     _attr: {
-                                        "w:bottom": 1440,
-                                        "w:footer": 708,
-                                        "w:gutter": 0,
-                                        "w:header": 708,
-                                        "w:left": 1440,
-                                        "w:mirrorMargins": false,
-                                        "w:right": 1440,
-                                        "w:top": 1440,
-                                    },
-                                },
-                            },
-                            {
-                                "w:cols": {
-                                    _attr: {
-                                        "w:num": 1,
-                                        "w:sep": false,
-                                        "w:space": 708,
-                                    },
-                                },
-                            },
-                            {
-                                "w:docGrid": {
-                                    _attr: {
-                                        "w:linePitch": 360,
+                                        "w:bottom": sectionMarginDefaults.BOTTOM,
+                                        "w:footer": sectionMarginDefaults.FOOTER,
+                                        "w:gutter": sectionMarginDefaults.GUTTER,
+                                        "w:header": sectionMarginDefaults.HEADER,
+                                        "w:left": sectionMarginDefaults.LEFT,
+                                        "w:right": sectionMarginDefaults.RIGHT,
+                                        "w:top": sectionMarginDefaults.TOP,
                                     },
                                 },
                             },
@@ -156,24 +142,26 @@ describe("File", () => {
                                     _attr: {},
                                 },
                             },
+                            // {
+                            //     "w:cols": {
+                            //         _attr: {
+                            //             "w:num": 1,
+                            //             "w:sep": false,
+                            //             "w:space": 708,
+                            //         },
+                            //     },
+                            // },
+                            {
+                                "w:docGrid": {
+                                    _attr: {
+                                        "w:linePitch": 360,
+                                    },
+                                },
+                            },
                         ],
                     },
                 ],
             });
-        });
-    });
-
-    describe("#addTrackRevisionsFeature", () => {
-        it("should call the underlying document's add", () => {
-            const file = new File({
-                features: {
-                    trackRevisions: true,
-                },
-                sections: [],
-            });
-
-            // tslint:disable-next-line: no-unused-expression no-string-literal
-            expect(file.Settings["trackRevisions"]).to.exist;
         });
     });
 
