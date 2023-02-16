@@ -2,7 +2,7 @@
 
 You can generate table of contents with `docx`. More information can be found [here](http://officeopenxml.com/WPtableOfContents.php).
 
-> Tables of Contents are fields and, by design, it's content is only generated or updated by Word. We can't do it programatically.
+> Tables of Contents are fields and, by design, it's content is only generated or updated by Word. We can't do it programmatically.
 > This is why, when you open a the file, Word you will prompt the message "This document contains fields that may refer to other files. Do you want to update the fields in this document?".
 > You have say yes to Word generate the content of all table of contents.
 
@@ -12,14 +12,29 @@ The complete documentation can be found [here](https://www.ecma-international.or
 
 All you need to do is create a `TableOfContents` object and assign it to the document.
 
-```ts
-const toc = new TableOfContents("Summary", {
-    hyperlink: true,
-    headingStyleRange: "1-5",
-    stylesWithLevels: [new StyleLevel("MySpectacularStyle", 1)],
-});
+**Note**: updateFields feature must be enabled for TableOfContents to update correctly.
 
-doc.addTableOfContents(toc);
+```ts
+const doc = new Document({
+    features: {
+        updateFields: true,
+    },
+    sections: [
+        {
+            children: [
+                new TableOfContents("Summary", {
+                    hyperlink: true,
+                    headingStyleRange: "1-5",
+                }),
+                new Paragraph({
+                    text: "Header #1",
+                    heading: HeadingLevel.HEADING_1,
+                    pageBreakBefore: true,
+                }),
+            ]
+        }
+    ]
+});
 ```
 
 ## Table of Contents Options
@@ -46,30 +61,6 @@ Here is the list of all options that you can use to generate your tables of cont
 | hideTabAndPageNumbersInWebView  | boolean      | `\z`             | Hides tab leader and page numbers in web page view (§17.18.102).                                                                                                                                                                                                                                                                                                                                                 |
 
 ## Examples
-
-```ts
-// Let's define the options for generate a TOC for heading 1-5 and MySpectacularStyle,
-// making the entries be hyperlinks for the paragraph
-const toc = new TableOfContents("Summary", {
-    hyperlink: true,
-    headingStyleRange: "1-5",
-    stylesWithLevels: [new StyleLevel("MySpectacularStyle", 1)],
-});
-
-doc.addTableOfContents(toc);
-
-doc.add(new Paragraph("Header #1").heading1().pageBreakBefore());
-doc.add(new Paragraph("I'm a little text, very nicely written.'"));
-
-doc.add(new Paragraph("Header #2").heading1().pageBreakBefore());
-doc.add(new Paragraph("I'm another text very nicely written.'"));
-doc.add(new Paragraph("Header #2.1").heading2());
-doc.add(new Paragraph("I'm another text very nicely written.'"));
-
-doc.add(new Paragraph("My Spectacular Style #1").style("MySpectacularStyle").pageBreakBefore());
-```
-
-### Complete example
 
 [Example](https://raw.githubusercontent.com/dolanmiu/docx/master/demo/28-table-of-contents.ts ':include')
 

@@ -4,9 +4,9 @@
 
 ## Intro
 
-* `Tables` contain a list of `Rows`
-* `Rows` contain a list of `TableCells`
-* `TableCells` contain a list of `Parahraphs` and/or `Tables`. You can add `Tables` as tables can be nested inside each other
+-   `Tables` contain a list of `Rows`
+-   `Rows` contain a list of `TableCells`
+-   `TableCells` contain a list of `Paragraphs` and/or `Tables`. You can add `Tables` as tables can be nested inside each other
 
 Create a simple table like so:
 
@@ -19,8 +19,10 @@ const table = new Table({
 Then add the table in the `section`
 
 ```ts
-doc.addSection({
-    children: [table],
+const doc = new Document({
+    sections: [{
+        children: [table],
+    }];
 });
 ```
 
@@ -51,16 +53,15 @@ const table = new Table({
 });
 ```
 
-### Pagination
-
-#### Prevent row pagination
-
-To prevent breaking contents of a row across multiple pages, call `cantSplit`:
+### Set Indent
 
 ```ts
 const table = new Table({
-    rows: [],
-    cantSplit: true,
+    ...,
+    indent: {
+        size: 600,
+        type: WidthType.DXA,
+    }
 });
 ```
 
@@ -98,12 +99,12 @@ const table = new Table({
 
 Here is a list of options you can add to the `table row`:
 
-| Property    | Type                                  | Notes    |
-| ----------- | ------------------------------------- | -------- |
-| children    | `Array<TableCell>`                    | Required |
-| cantSplit   | `boolean`                             | Optional |
-| tableHeader | `boolean`                             | Optional |
-| height      | `{ value: number, rule: HeightRule }` | Optional |
+| Property    | Type                                   | Notes    |
+| ----------- | -------------------------------------- | -------- |
+| children    | `Array<TableCell>`                     | Required |
+| cantSplit   | `boolean`                              | Optional |
+| tableHeader | `boolean`                              | Optional |
+| height      | `{ value: number, rule: HeightRule }`  | Optional |
 
 ### Repeat row
 
@@ -113,6 +114,19 @@ If a table is paginated on multiple pages, it is possible to repeat a row at the
 const row = new TableRow({
     ...,
     tableHeader: true,
+});
+```
+
+### Pagination
+
+#### Prevent row pagination
+
+To prevent breaking contents of a row across multiple pages, call `cantSplit`:
+
+```ts
+const row = new Row({
+    ...,
+    cantSplit: true,
 });
 ```
 
@@ -142,8 +156,8 @@ const tableRow = new TableRow({
 
 | Property      | Type                                | Notes                                                       |
 | ------------- | ----------------------------------- | ----------------------------------------------------------- |
-| children      | `Array<Paragraph | Table>`          | Required. You can nest tables by adding a table into a cell |
-| shading       | `ITableShadingAttributesProperties` | Optional                                                    |
+| children      | `Array<Paragraph or Table>`         | Required. You can nest tables by adding a table into a cell |
+| shading       | `IShadingAttributesProperties`      | Optional                                                    |
 | margins       | `ITableCellMarginOptions`           | Optional                                                    |
 | verticalAlign | `VerticalAlign`                     | Optional                                                    |
 | columnSpan    | `number`                            | Optional                                                    |
@@ -169,7 +183,7 @@ const cell = new TableCell({
         top: {
             style: BorderStyle.DASH_DOT_STROKED,
             size: 1,
-            color: "red",
+            color: "ff0000",
         },
         bottom: {
             style: BorderStyle.THICK_THIN_MEDIUM_GAP,
@@ -188,12 +202,12 @@ Google DOCS does not support start and end borders, instead they use left and ri
 const cell = new TableCell({
     ...,
     borders: {
-        top: {
+        left: {
             style: BorderStyle.DOT_DOT_DASH,
             size: 3,
-            color: "green",
+            color: "00FF00",
         },
-        bottom: {
+        right: {
             style: BorderStyle.DOT_DOT_DASH,
             size: 3,
             color: "ff8000",
@@ -228,18 +242,12 @@ const cell = new TableCell({
 
 `WidthType` values can be:
 
-| Property | Notes                             |
-| -------- | --------------------------------- |
-| AUTO     |                                   |
-| DXA      | value is in twentieths of a point |
-| NIL      | is considered as zero             |
-| PCT      | percent of table width            |
-
-#### Example
-
-```ts
-cell.Properties.setWidth(100, WidthType.DXA);
-```
+| Property   | Notes                             |
+| ---------- | --------------------------------- |
+| AUTO       |                                   |
+| DXA        | Value is in twentieths of a point |
+| NIL        | Is considered as zero             |
+| PERCENTAGE | Percent of table width            |
 
 ### Nested Tables
 
@@ -326,6 +334,16 @@ const cell = new TableCell({
 });
 ```
 
+### Visual Right to Left Table
+
+It is possible to reverse how the cells of the table are displayed. The table direction. More info here: https://superuser.com/questions/996912/how-to-change-a-table-direction-in-microsoft-word
+
+```ts
+const table = new Table({
+    visuallyRightToLeft: true,
+});
+```
+
 ## Examples
 
 [Example](https://raw.githubusercontent.com/dolanmiu/docx/master/demo/4-basic-table.ts ':include')
@@ -334,7 +352,7 @@ _Source: https://github.com/dolanmiu/docx/blob/master/demo/4-basic-table.ts_
 
 ### Custom borders
 
-Example showing how to add colourful borders to tables
+Example showing how to add colorful borders to tables
 
 [Example](https://raw.githubusercontent.com/dolanmiu/docx/master/demo/20-table-cell-borders.ts ':include')
 

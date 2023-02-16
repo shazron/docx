@@ -1,8 +1,8 @@
 # Paragraph
 
-> Everything (text, images, graphs etc) in OpenXML is organised in paragraphs.
+> Everything (text, images, graphs etc) in OpenXML is organized in paragraphs.
 
-!> Paragraphs requires an understanding of [Sections](sections.md).
+!> Paragraphs requires an understanding of [Sections](usage/sections.md).
 
 You can create `Paragraphs` in the following ways:
 
@@ -16,15 +16,11 @@ const paragraph = new Paragraph("Short hand Hello World");
 
 ### Children Method
 
-This method is useful for adding different [text](text.md) with different styles, [symbols](symbols.md), or adding [images](images.md) inline.
+This method is useful for adding different [text](usage/text.md) with different styles, [symbols](usage/symbols.md), or adding [images](usage/images.md) inline.
 
 ```ts
 const paragraph = new Paragraph({
-    children: [
-        new TextRun("Lorem Ipsum Foo Bar"),
-        new TextRun("Hello World"),
-        new SymbolRun("F071"),
-    ],
+    children: [new TextRun("Lorem Ipsum Foo Bar"), new TextRun("Hello World"), new SymbolRun("F071")],
 });
 ```
 
@@ -36,23 +32,27 @@ const paragraph = new Paragraph({
 });
 ```
 
-After you create the paragraph, you must add the paragraph into the `document's section`. Learn more about `sections` here:
+After you create the paragraph, you must add the paragraph into a `section`:
 
 ```ts
-doc.addSection({
-    children: [paragraph],
+const doc = new Document({
+    sections: [{
+        children: [paragraph],
+    }];
 });
 ```
 
-Or the preferred convension, define the paragraph inside the section and remove the usage of variables:
+Or the preferred convention, define the paragraph inside the section and remove the usage of variables:
 
 ```ts
-doc.addSection({
-    children: [
-        new Paragraph({
-            children: [new TextRun("Lorem Ipsum Foo Bar"), new TextRun("Hello World")],
-        }),
-    ],
+const doc = new Document({
+    sections: [{
+        children: [
+            new Paragraph({
+                children: [new TextRun("Lorem Ipsum Foo Bar"), new TextRun("Hello World")],
+            }),
+        ],
+    }];
 });
 ```
 
@@ -60,27 +60,29 @@ doc.addSection({
 
 This is the list of options for a paragraph. A detailed explanation is below:
 
-| Property                      | Type                                                                                                                | Mandatory? | Possible Values                                                                                            |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------- |
-| [text](#text)                 | `string`                                                                                                            | Optional   |                                                                                                            |
-| [heading](#heading)           | `HeadingLevel`                                                                                                      | Optional   | `HEADING_1`, `HEADING_2`, `HEADING_3`, `HEADING_4`, `HEADING_5`, `HEADING_6`, `TITLE`                      |
-| [border](#border)             | `IBorderOptions`                                                                                                    | Optional   | `top`, `bottom`, `left`, `right`. Each of these are of type IBorderPropertyOptions. Click here for Example |
-| [spacing](#spacing)           | `ISpacingProperties`                                                                                                | Optional   | See below for ISpacingProperties                                                                           |
-| [outlineLevel](#outline-level) | `number`                                                                                                            | Optional   |                                                                                                            |
-| alignment                     | `AlignmentType`                                                                                                     | Optional   |                                                                                                            |
-| heading                       | `HeadingLevel`                                                                                                      | Optional   |                                                                                                            |
-| bidirectional                 | `boolean`                                                                                                           | Optional   |                                                                                                            |
-| thematicBreak                 | `boolean`                                                                                                           | Optional   |                                                                                                            |
-| pageBreakBefore               | `boolean`                                                                                                           | Optional   |                                                                                                            |
-| contextualSpacing             | `boolean`                                                                                                           | Optional   |                                                                                                            |
-| indent                        | `IIndentAttributesProperties`                                                                                       | Optional   |                                                                                                            |
-| keepLines                     | `boolean`                                                                                                           | Optional   |                                                                                                            |
-| keepNext                      | `boolean`                                                                                                           | Optional   |                                                                                                            |
-| children                      | `(TextRun or PictureRun or Hyperlink)[]`                                                                            | Optional   |                                                                                                            |
-| style                         | `string`                                                                                                            | Optional   |                                                                                                            |
-| tabStop                       | `{ left?: ITabStopOptions; right?: ITabStopOptions; maxRight?: { leader: LeaderType; }; center?: ITabStopOptions }` | Optional   |                                                                                                            |
-| bullet                        | `{ level: number }`                                                                                                 | Optional   |                                                                                                            |
-| numbering                     | `{ num: Num; level: number; custom?: boolean }`                                                                     | Optional   |                                                                                                            |
+| Property                       | Type                                                                                                                | Mandatory? | Possible Values                                                                                                                                             |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [text](#text)                  | `string`                                                                                                            | Optional   |                                                                                                                                                             |
+| [heading](#heading)            | `HeadingLevel`                                                                                                      | Optional   | `HEADING_1`, `HEADING_2`, `HEADING_3`, `HEADING_4`, `HEADING_5`, `HEADING_6`, `TITLE`                                                                       |
+| [border](#border)              | `IBorderOptions`                                                                                                    | Optional   | `top`, `bottom`, `left`, `right`. Each of these are of type IBorderPropertyOptions. Click here for Example                                                  |
+| [spacing](#spacing)            | `ISpacingProperties`                                                                                                | Optional   | See below for ISpacingProperties                                                                                                                            |
+| [outlineLevel](#outline-level) | `number`                                                                                                            | Optional   |                                                                                                                                                             |
+| alignment                      | `AlignmentType`                                                                                                     | Optional   | `START`, `CENTER`, `END`, `BOTH`, `MEDIUM_KASHIDA`, `DISTRIBUTE`, `NUM_TAB`, `HIGH_KASHIDA`, `LOW_KASHIDA`, `THAI_DISTRIBUTE`, `LEFT`, `RIGHT`, `JUSTIFIED` |
+| heading                        | `HeadingLevel`                                                                                                      | Optional   |                                                                                                                                                             |
+| bidirectional                  | `boolean`                                                                                                           | Optional   |                                                                                                                                                             |
+| thematicBreak                  | `boolean`                                                                                                           | Optional   |                                                                                                                                                             |
+| pageBreakBefore                | `boolean`                                                                                                           | Optional   |                                                                                                                                                             |
+| contextualSpacing              | `boolean`                                                                                                           | Optional   |                                                                                                                                                             |
+| indent                         | `IIndentAttributesProperties`                                                                                       | Optional   |                                                                                                                                                             |
+| keepLines                      | `boolean`                                                                                                           | Optional   |                                                                                                                                                             |
+| keepNext                       | `boolean`                                                                                                           | Optional   |                                                                                                                                                             |
+| children                       | `(TextRun or ImageRun or Hyperlink)[]`                                                                              | Optional   |                                                                                                                                                             |
+| style                          | `string`                                                                                                            | Optional   |                                                                                                                                                             |
+| [tabStop](usage/tab-stops)     | `{ left?: ITabStopOptions; right?: ITabStopOptions; maxRight?: { leader: LeaderType; }; center?: ITabStopOptions }` | Optional   |                                                                                                                                                             |
+| [bullet](usage/bullet-points)  | `{ level: number }`                                                                                                 | Optional   |                                                                                                                                                             |
+| [numbering](usage/numbering)   | `{ num: ConcreteNumbering; level: number; custom?: boolean }`                                                       | Optional   |                                                                                                                                                             |
+| [widowControl](#widow-control) | `boolean`                                                                                                           | Optional   |                                                                                                                                                             |
+| [frame](usage/text-frames.md)  | `IFrameOptions`                                                                                                     | Optional   |                                                                                                                                                             |
 
 ## Text
 
@@ -109,7 +111,7 @@ const paragraph = new Paragraph({
 
 ## Border
 
-Add borders to a `Paragraph`. Good for making the `Paragraph` stand out
+Add borders to a `Paragraph`. Good for making the `Paragraph` stand out. Border top and border bottom can be used as a horizontal rule (also known as horizontal line).
 
 #### IBorderPropertyOptions
 
@@ -119,7 +121,7 @@ Add borders to a `Paragraph`. Good for making the `Paragraph` stand out
 | -------- | -------- | -------- |
 | color    | `string` | Required |
 | space    | `number` | Required |
-| value    | `string` | Required |
+| style    | `string` | Required |
 | size     | `number` | Required |
 
 **Example:**
@@ -133,16 +135,42 @@ const paragraph = new Paragraph({
         top: {
             color: "auto",
             space: 1,
-            value: "single",
+            style: "single",
             size: 6,
         },
         bottom: {
             color: "auto",
             space: 1,
-            value: "single",
+            style: "single",
             size: 6,
         },
     },
+});
+```
+
+## Shading
+
+Add color to an entire paragraph block
+
+```ts
+const paragraph = new Paragraph({
+    text: "shading",
+    shading: {
+        type: ShadingType.REVERSE_DIAGONAL_STRIPE,
+        color: "00FFFF",
+        fill: "FF0000",
+    },
+});
+```
+
+## Widow Control
+
+Allow First/Last Line to Display on a Separate Page
+
+```ts
+const paragraph = new Paragraph({
+    text: "shading",
+    widowControl: true,
 });
 ```
 
@@ -152,12 +180,14 @@ Adding spacing between paragraphs
 
 ### ISpacingProperties
 
-| Property | Type     | Notes    |
-| -------- | -------- | -------- |
-| after    | `number` | Optional |
-| before   | `number` | Optional |
-| line     | `number` | Optional |
-| lineRule | `string` | Optional |
+| Property | Type           | Notes    | Possible Values                        |
+| -------- | -------------- | -------- | -------------------------------------- |
+| after    | `number`       | Optional |                                        |
+| before   | `number`       | Optional |                                        |
+| line     | `number`       | Optional |                                        |
+| lineRule | `LineRuleType` | Optional | `AT_LEAST`, `EXACTLY`, `EXACT`, `AUTO` |
+
+Note: The `lineRule` property has different values depending on the version of Word you are using. The `EXACTLY` value is only available in Word 2016 and above. Use `EXACT` for greater support, including LibreOffice etc. Read this issue for more information: https://github.com/dolanmiu/docx/issues/1773.
 
 **Example:**
 
@@ -184,7 +214,7 @@ const paragraph = new Paragraph({
 
 ## Styles
 
-To create styles, please refer to the styling Wiki: https://github.com/dolanmiu/docx/wiki/Styling
+To create styles, please refer to the [styling documentation](usage/styling-with-js)
 
 ![Word 2013 Styles menu](http://content.gcflearnfree.org/topics/233/style_apply_choose.png "Word 2013 Styles menu")
 
@@ -248,10 +278,12 @@ The above example will create a heading with a page break directly under it.
 
 ## Page Break
 
-To move to a new page (insert a page break), simply add `.pageBreak()` on a paragraph:
+To move to a new page (insert a page break):
 
 ```ts
-const paragraph = new docx.Paragraph("Amazing Heading").pageBreak();
+const paragraph = new docx.Paragraph({
+    children: [new TextRun("Amazing Heading"), new PageBreak()],
+});
 ```
 
 The above example will create a heading and start a new page immediately afterwards.
