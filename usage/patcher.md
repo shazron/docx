@@ -37,6 +37,8 @@ interface Patch {
 
 The patcher also takes in a `keepOriginalStyles` boolean, which will preserve the styles of the patched text when set to true.
 
+A patch can also be for a drawing whose alt text holds the placeholder, rather than for text: `ChartDataPatch` from `docx/charts` gives a chart made in Word new data, keeping its look. See [Charts in Templates](usage/chart-templates.md).
+
 ### How to patch existing document
 
 1. Open your existing word document in your favorite Word Processor
@@ -53,7 +55,7 @@ The patcher also takes in a `keepOriginalStyles` boolean, which will preserve th
 
 ?> Notice how there is no handlebar notation in the key.
 
-The patch can be as simple as a string, or as complex as a table. Images, hyperlinks, and other complex elements within the `docx` library are also supported.
+The patch can be as simple as a string, or as complex as a table. Images, hyperlinks, charts from `docx/charts` (see [Charts in Templates](usage/chart-size-and-position.md#in-templates)), and other complex elements within the `docx` library are also supported.
 
 ```ts
 patchDocument(fs.readFileSync("My Document.docx"), {
