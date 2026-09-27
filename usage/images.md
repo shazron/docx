@@ -38,7 +38,7 @@ To create a `floating` image on top of text:
 ```ts
 const image = new ImageRun({
     type: 'gif',
-    data: fs.readFileSync("./demo/images/pizza.gif"),
+    data: fs.readFileSync("./demo/assets/images/pizza.gif"),
     transformation: {
         width: 200,
         height: 200,
@@ -59,7 +59,7 @@ By default with no arguments, its an `inline` image:
 ```ts
 const image = new ImageRun({
     type: "gif",
-    data: fs.readFileSync("./demo/images/pizza.gif"),
+    data: fs.readFileSync("./demo/assets/images/pizza.gif"),
     transformation: {
         width: 100,
         height: 100,
@@ -217,7 +217,7 @@ For example:
 ```ts
 const image = new ImageRun({
     type: "gif",
-    data: fs.readFileSync("./demo/images/pizza.gif"),
+    data: fs.readFileSync("./demo/assets/images/pizza.gif"),
     transformation: {
         width: 200,
         height: 200,
@@ -266,7 +266,7 @@ For example:
 ```ts
 const image = new ImageRun({
     type: "gif",
-    data: fs.readFileSync("./demo/images/pizza.gif"),
+    data: fs.readFileSync("./demo/assets/images/pizza.gif"),
     transformation: {
         width: 200,
         height: 200,
@@ -290,6 +290,21 @@ const image = new ImageRun({
 });
 ```
 
+## Run Formatting
+
+Use `run` to format the run the image is in, with the same options as a `TextRun`'s formatting. `position` raises or lowers an inline image from the text's baseline, by a signed length such as `"2pt"` or `"-2pt"`:
+
+```ts
+const image = new ImageRun({
+    type: "gif",
+    data: fs.readFileSync("./demo/assets/images/pizza.gif"),
+    transformation: { width: 100, height: 100 },
+    run: { position: "-2pt" },
+});
+```
+
+To place an image at page coordinates or control text wrapping, use [`floating`](#floating) instead.
+
 ## Alternative Text
 
 Specifies common non-visual DrawingML properties. A name, title and description for a picture can be specified.
@@ -297,7 +312,7 @@ Specifies common non-visual DrawingML properties. A name, title and description 
 ```ts
 const image = new ImageRun({
     type: "gif",
-    data: fs.readFileSync("./demo/images/pizza.gif"),
+    data: fs.readFileSync("./demo/assets/images/pizza.gif"),
     altText: {
         title: "This is an ultimate title",
         description: "This is an ultimate image",
@@ -356,8 +371,8 @@ Crop an image by trimming a percentage off each edge before it's stretched to fi
 
 ```ts
 const image = new ImageRun({
-    type: "png",
-    data: fs.readFileSync("./demo/images/pizza.png"),
+    type: "gif",
+    data: fs.readFileSync("./demo/assets/images/pizza.gif"),
     transformation: {
         width: 200,
         height: 200,
@@ -382,7 +397,7 @@ const image = new ImageRun({
 
 ## Track Changes
 
-Images can be marked as inserted or deleted revisions for change tracking. Pass an `insertion` or `deletion` property to `ImageRun`:
+Images can be marked as inserted or deleted revisions for change tracking. Pass an `insertion` or `deletion` property to `ImageRun`, or both for an image that was inserted and then deleted, such as by another author:
 
 ```ts
 new ImageRun({
@@ -405,28 +420,28 @@ See [Change Tracking – Image Revisions](usage/change-tracking.md#image-revisio
 
 Importing Images from file system path
 
-[Example](https://raw.githubusercontent.com/dolanmiu/docx/master/demo/5-images.ts ":include")
+[Example](https://raw.githubusercontent.com/dolanmiu/docx/master/demo/images/images.ts ":include")
 
-_Source: https://github.com/dolanmiu/docx/blob/master/demo/5-images.ts_
+_Source: https://github.com/dolanmiu/docx/blob/master/demo/images/images.ts_
 
 ### Add images to header and footer
 
 Example showing how to add image to headers and footers
 
-[Example](https://raw.githubusercontent.com/dolanmiu/docx/master/demo/9-images-in-header-and-footer.ts ":include")
+[Example](https://raw.githubusercontent.com/dolanmiu/docx/master/demo/images/images-in-header-and-footer.ts ":include")
 
-_Source: https://github.com/dolanmiu/docx/blob/master/demo/9-images-in-header-and-footer.ts_
+_Source: https://github.com/dolanmiu/docx/blob/master/demo/images/images-in-header-and-footer.ts_
 
 ### Floating images
 
 Example showing how to float images on top of text and optimally give a `margin`
 
-[Example](https://raw.githubusercontent.com/dolanmiu/docx/master/demo/38-text-wrapping.ts ":include")
+[Example](https://raw.githubusercontent.com/dolanmiu/docx/master/demo/images/text-wrapping.ts ":include")
 
-_Source: https://github.com/dolanmiu/docx/blob/master/demo/38-text-wrapping.ts_
+_Source: https://github.com/dolanmiu/docx/blob/master/demo/images/text-wrapping.ts_
 
 ### Links and decorative images
 
-[Example](https://raw.githubusercontent.com/dolanmiu/docx/master/demo/114-image-links.ts ":include")
+[Example](https://raw.githubusercontent.com/dolanmiu/docx/master/demo/images/image-links.ts ":include")
 
-_Source: https://github.com/dolanmiu/docx/blob/master/demo/114-image-links.ts_
+_Source: https://github.com/dolanmiu/docx/blob/master/demo/images/image-links.ts_
