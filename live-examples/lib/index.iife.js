@@ -8951,11 +8951,11 @@ var docx = (function(exports) {
 	* @publicApi
 	*/
 	var AlignmentType = {
-		/** Align Start */
+		/** Align Start: the left in a left-to-right paragraph, and the right in a `bidirectional` (right-to-left) paragraph */
 		START: "start",
 		/** Align Center */
 		CENTER: "center",
-		/** End */
+		/** Align End: the right in a left-to-right paragraph, and the left in a `bidirectional` (right-to-left) paragraph */
 		END: "end",
 		/** Justified */
 		BOTH: "both",
@@ -8971,9 +8971,9 @@ var docx = (function(exports) {
 		LOW_KASHIDA: "lowKashida",
 		/** Thai Language Justification */
 		THAI_DISTRIBUTE: "thaiDistribute",
-		/** Align Left */
+		/** Align Left: a paragraph stays on the left of the page even when it is `bidirectional` (right-to-left) */
 		LEFT: "left",
-		/** Align Right */
+		/** Align Right: a paragraph stays on the right of the page even when it is `bidirectional` (right-to-left) */
 		RIGHT: "right",
 		/** Justified */
 		JUSTIFIED: "both"
@@ -14674,7 +14674,9 @@ DOT: "dot" };
 				this.root.push(createHyperlinkClick(element.linkId, false));
 				break;
 			}
-			return super.prepForXml(context);
+			const result = super.prepForXml(context);
+			this.root.splice(1);
+			return result;
 		}
 	};
 	//#endregion
@@ -16405,7 +16407,7 @@ EXTERNAL: "External" };
 	* );
 	* ```
 	*/
-	var Relationships = class extends XmlComponent {
+	var Relationships = class Relationships extends XmlComponent {
 		constructor() {
 			super("Relationships");
 			this.root.push(new RelationshipsAttributes({ xmlns: "http://schemas.openxmlformats.org/package/2006/relationships" }));
@@ -16420,6 +16422,20 @@ EXTERNAL: "External" };
 		*/
 		addRelationship(id, type, target, targetMode) {
 			this.root.push(createRelationship(`rId${id}`, type, target, targetMode));
+		}
+		/**
+		* Creates a copy of the relationships given. Relationships added to the copy aren't added to them, so the compiler
+		* adds the ones it writes for a part, such as to its images, to a copy, and packing a document again doesn't add
+		* them a second time.
+		*
+		* Static, as `IContext` is public and has `Relationships`, so a new instance member would change the public API.
+		*
+		* @param relationships - The relationships to copy
+		*/
+		static copy(relationships) {
+			const copy = new Relationships();
+			copy.root.push(...relationships.root.slice(1));
+			return copy;
 		}
 		/**
 		* Gets the count of relationships in this collection.
@@ -18885,6 +18901,19 @@ MAX: 9026 };
 	* @module
 	*/
 	/**
+	* The alignment to write for each side of the page in a right-to-left paragraph.
+	*
+	* Word and LibreOffice read `w:jc` `left` and `right` as the start and end of the paragraph, the same as
+	* `start` and `end` (ISO/IEC 29500-4 maps the transitional `left` and `right` onto the strict `start` and `end`,
+	* and [MS-OE376] 2.3.1.13 notes the same for Word 2007). So in a `w:bidi` paragraph `left` lands on the right
+	* side of the page. Swapping keeps `AlignmentType.LEFT` and `AlignmentType.RIGHT` on the side of the page they name.
+	* `left` and `right` are written rather than `end` and `start` because Word 2007 does not know `start` and `end`.
+	*/
+	var RIGHT_TO_LEFT_ALIGNMENTS = {
+		left: "right",
+		right: "left"
+	};
+	/**
 	* Represents paragraph properties (pPr) in a WordprocessingML document.
 	*
 	* The paragraph properties element specifies all formatting applied to a paragraph,
@@ -19047,7 +19076,7 @@ MAX: 9026 };
 			if (options.spacing) this.push(createSpacing(options.spacing));
 			if (options.indent) this.push(createIndent(options.indent));
 			if (options.contextualSpacing !== void 0) this.push(new OnOffElement("w:contextualSpacing", options.contextualSpacing));
-			if (options.alignment) this.push(createAlignment(options.alignment));
+			if (options.alignment) this.push(createAlignment(options.bidirectional && RIGHT_TO_LEFT_ALIGNMENTS[options.alignment] || options.alignment));
 			if (options.outlineLevel !== void 0) this.push(createOutlineLevel(options.outlineLevel));
 			if (options.suppressLineNumbers !== void 0) this.push(new OnOffElement("w:suppressLineNumbers", options.suppressLineNumbers));
 			if (options.autoSpaceEastAsianText !== void 0) this.push(new OnOffElement("w:autoSpaceDN", options.autoSpaceEastAsianText));
@@ -20881,6 +20910,421 @@ MAX: 9026 };
 		}
 	};
 	//#endregion
+	//#region src/file/table-of-contents/field-instruction.ts
+	/**
+	* Field Instruction module for Table of Contents.
+	*
+	* This module handles the generation of TOC field instruction text
+	* that controls how the table of contents is built.
+	*
+	* Reference: http://officeopenxml.com/WPfieldInstructions.php
+	*
+	* @module
+	*/
+	/**
+	* Represents a field instruction for a Table of Contents.
+	*
+	* The FieldInstruction class generates the TOC field code string that Word uses
+	* to determine how to build the table of contents, including which headings to include,
+	* formatting options, and other TOC-specific settings.
+	*
+	* Reference: http://officeopenxml.com/WPfieldInstructions.php
+	*
+	* ## XSD Schema
+	* ```xml
+	* <xsd:element name="instrText" type="CT_Text"/>
+	* ```
+	*
+	* @example
+	* ```typescript
+	* // Basic TOC field instruction
+	* new FieldInstruction({ headingStyleRange: "1-3" });
+	*
+	* // TOC with hyperlinks and custom styles
+	* new FieldInstruction({
+	*   hyperlink: true,
+	*   headingStyleRange: "1-3",
+	*   stylesWithLevels: [new StyleLevel("CustomStyle", 2)],
+	* });
+	* ```
+	*/
+	var FieldInstruction = class extends XmlComponent {
+		constructor(properties = {}) {
+			super("w:instrText");
+			_defineProperty(this, "properties", void 0);
+			this.properties = properties;
+			this.root.push(new TextAttributes({ space: SpaceType.PRESERVE }));
+			let instruction = "TOC";
+			if (this.properties.captionLabel) instruction = `${instruction} \\a "${this.properties.captionLabel}"`;
+			if (this.properties.entriesFromBookmark) instruction = `${instruction} \\b "${this.properties.entriesFromBookmark}"`;
+			if (this.properties.captionLabelIncludingNumbers) instruction = `${instruction} \\c "${this.properties.captionLabelIncludingNumbers}"`;
+			if (this.properties.sequenceAndPageNumbersSeparator) instruction = `${instruction} \\d "${this.properties.sequenceAndPageNumbersSeparator}"`;
+			if (this.properties.tcFieldIdentifier) instruction = `${instruction} \\f "${this.properties.tcFieldIdentifier}"`;
+			if (this.properties.hyperlink) instruction = `${instruction} \\h`;
+			if (this.properties.tcFieldLevelRange) instruction = `${instruction} \\l "${this.properties.tcFieldLevelRange}"`;
+			if (this.properties.pageNumbersEntryLevelsRange) instruction = `${instruction} \\n "${this.properties.pageNumbersEntryLevelsRange}"`;
+			if (this.properties.headingStyleRange) instruction = `${instruction} \\o "${this.properties.headingStyleRange}"`;
+			if (this.properties.entryAndPageNumberSeparator) instruction = `${instruction} \\p "${this.properties.entryAndPageNumberSeparator}"`;
+			if (this.properties.seqFieldIdentifierForPrefix) instruction = `${instruction} \\s "${this.properties.seqFieldIdentifierForPrefix}"`;
+			if (this.properties.stylesWithLevels && this.properties.stylesWithLevels.length) {
+				const styles = this.properties.stylesWithLevels.map((sl) => `${sl.styleName},${sl.level}`).join(",");
+				instruction = `${instruction} \\t "${styles}"`;
+			}
+			if (this.properties.useAppliedParagraphOutlineLevel) instruction = `${instruction} \\u`;
+			if (this.properties.preserveTabInEntries) instruction = `${instruction} \\w`;
+			if (this.properties.preserveNewLineInEntries) instruction = `${instruction} \\x`;
+			if (this.properties.hideTabAndPageNumbersInWebView) instruction = `${instruction} \\z`;
+			this.root.push(instruction);
+		}
+	};
+	//#endregion
+	//#region src/file/table-of-contents/sdt-content.ts
+	/**
+	* Structured Document Tag Content module.
+	*
+	* This module represents the content container for structured document tags,
+	* including table of contents elements.
+	*
+	* Reference: http://officeopenxml.com/WPtableOfContents.php
+	*
+	* @module
+	*/
+	/**
+	* Represents the content portion of a Structured Document Tag.
+	*
+	* The StructuredDocumentTagContent contains the actual content elements
+	* (paragraphs, tables, etc.) within a structured document tag, such as
+	* the paragraphs that make up a table of contents.
+	*
+	* Reference: http://officeopenxml.com/WPtableOfContents.php
+	*
+	* ## XSD Schema
+	* ```xml
+	* <xsd:complexType name="CT_SdtContentBlock">
+	*   <xsd:group ref="EG_ContentBlockContent" minOccurs="0" maxOccurs="unbounded"/>
+	* </xsd:complexType>
+	* ```
+	*
+	* @example
+	* ```typescript
+	* const content = new StructuredDocumentTagContent();
+	* content.addChildElement(new Paragraph("Content"));
+	* ```
+	*/
+	var StructuredDocumentTagContent = class extends XmlComponent {
+		constructor() {
+			super("w:sdtContent");
+		}
+	};
+	//#endregion
+	//#region src/file/table-of-contents/heading-entries.ts
+	/**
+	* Entries written into a table of contents from the headings of the document.
+	*
+	* A table of contents is a TOC field. Word fills in its entries when it updates the field. Until then, and in
+	* applications that don't update it, such as LibreOffice, it shows the entries it was last filled in with, and without
+	* any it is empty. So once the body is written, each table of contents that wasn't given `cachedEntries` or
+	* `contentChildren` is filled in from the headings its switches include, the way Word fills it in: each heading is
+	* bookmarked, and its entry links to the bookmark and gives its page with a PAGEREF field. The page numbers are left
+	* empty, because they depend on how the document is laid out. Word fills them in when it updates the field.
+	*
+	* @module
+	*/
+	/** The formatted tables of contents, with what each is filled in with, or undefined when it was given its content */
+	var writtenTables = /* @__PURE__ */ new WeakMap();
+	/**
+	* Records a formatted table of contents, so the paragraphs in it aren't taken for headings, with what to fill it in
+	* with from the headings once the body it is in is written. That is undefined when it was given its content.
+	*/
+	var recordTableOfContents = (table, fillWith) => {
+		writtenTables.set(table, fillWith);
+	};
+	/**
+	* The ids of the bookmarks on a body's headings: the first for its first bookmarked heading, and so on. Each is taken
+	* from the counter every bookmark shares, the first time it is needed, so a document packed again is written the same.
+	*/
+	var HeadingBookmarkIds = class {
+		constructor() {
+			_defineProperty(this, "ids", []);
+		}
+		get(index) {
+			var _this$ids, _this$ids$index;
+			(_this$ids$index = (_this$ids = this.ids)[index]) !== null && _this$ids$index !== void 0 || (_this$ids[index] = bookmarkUniqueNumericId());
+			return this.ids[index];
+		}
+	};
+	/** The name of a formatted element, or `_attr` for its parent's attributes */
+	var nameOf$1 = (element) => typeof element === "object" && element !== null ? Object.keys(element)[0] : void 0;
+	/** The children of a formatted element. An element with only attributes has them as its one child */
+	var childrenOf = (element) => {
+		const name = nameOf$1(element);
+		const content = name === void 0 ? void 0 : element[name];
+		return Array.isArray(content) ? content : content === void 0 ? [] : [content];
+	};
+	var childOf = (element, name) => childrenOf(element).find((child) => nameOf$1(child) === name);
+	var attributeOf = (element, attribute) => {
+		var _childOf;
+		return (_childOf = childOf(element, "_attr")) === null || _childOf === void 0 || (_childOf = _childOf._attr) === null || _childOf === void 0 ? void 0 : _childOf[attribute];
+	};
+	/** An attribute such as `w:val="2"` as a number. Imported XML gives it as a string */
+	var numberAttributeOf = (element, attribute) => {
+		const value = attributeOf(element, attribute);
+		return value === void 0 ? void 0 : Number(value);
+	};
+	/** The block-level containers of paragraphs: tables, their rows and cells, and content controls */
+	var BLOCK_CONTAINERS = /* @__PURE__ */ new Set([
+		"w:tbl",
+		"w:tr",
+		"w:tc",
+		"w:sdt",
+		"w:sdtContent",
+		"w:customXml"
+	]);
+	/**
+	* The paragraphs and the tables of contents, in the order they are in the body. A table of contents isn't looked into,
+	* so the paragraphs in it aren't taken for headings. Nor are paragraphs in text boxes, as in Word.
+	*/
+	var blocksOf = (elements) => elements.flatMap((element) => {
+		const name = nameOf$1(element);
+		if (name === "w:p" || writtenTables.has(element)) return [element];
+		return name !== void 0 && BLOCK_CONTAINERS.has(name) ? blocksOf(childrenOf(element)) : [];
+	});
+	/** The elements in a paragraph that its text is in. Deleted text, field instructions and drawings aren't */
+	var TEXT_CONTAINERS = /* @__PURE__ */ new Set([
+		"w:r",
+		"w:hyperlink",
+		"w:ins",
+		"w:moveTo",
+		"w:smartTag",
+		"w:customXml",
+		"w:sdt",
+		"w:sdtContent",
+		"w:fldSimple",
+		"w:dir",
+		"w:bdo"
+	]);
+	/** The text an element in a run stands for, such as `\t` for a tab. A page or column break isn't text */
+	var textOfRunContent = (element) => {
+		switch (nameOf$1(element)) {
+			case "w:t": return childrenOf(element).filter((child) => typeof child === "string").join("");
+			case "w:tab": return "	";
+			case "w:br": return [void 0, "textWrapping"].includes(attributeOf(element, "w:type")) ? "\n" : "";
+			case "w:cr": return "\n";
+			case "w:noBreakHyphen": return "-";
+			default: return "";
+		}
+	};
+	/** The text of a paragraph. Of a field, only its result is text, not its instruction */
+	var textOf = (paragraph) => {
+		const fields = [];
+		const read = (element) => {
+			const name = nameOf$1(element);
+			if (name !== void 0 && TEXT_CONTAINERS.has(name)) return childrenOf(element).map(read).join("");
+			if (name === "w:fldChar") {
+				const type = attributeOf(element, "w:fldCharType");
+				if (type === "begin") fields.push(false);
+				else if (type === "separate") fields[fields.length - 1] = true;
+				else fields.pop();
+				return "";
+			}
+			return fields.every(Boolean) ? textOfRunContent(element) : "";
+		};
+		return childrenOf(paragraph).map(read).join("");
+	};
+	/** The bookmarks started and ended in an element, in order */
+	var bookmarkMarksOf = (element) => {
+		const name = nameOf$1(element);
+		if (name === "w:bookmarkStart") return [{
+			start: true,
+			id: attributeOf(element, "w:id"),
+			name: attributeOf(element, "w:name")
+		}];
+		if (name === "w:bookmarkEnd") return [{
+			start: false,
+			id: attributeOf(element, "w:id")
+		}];
+		return name === void 0 || name === "_attr" ? [] : childrenOf(element).flatMap(bookmarkMarksOf);
+	};
+	/**
+	* The names of the bookmarks each paragraph is in, for the `\b` switch: those open where it starts, followed through the
+	* body, and those that start in it.
+	*/
+	var bookmarksOf = (paragraphs) => {
+		const open = /* @__PURE__ */ new Map();
+		return paragraphs.map((paragraph) => {
+			const marks = bookmarkMarksOf(paragraph);
+			const names = /* @__PURE__ */ new Set([...open.values(), ...marks.flatMap((mark) => mark.start ? [mark.name] : [])]);
+			for (const mark of marks) if (mark.start) open.set(mark.id, mark.name);
+			else open.delete(mark.id);
+			return names;
+		});
+	};
+	/** The details of each paragraph that could be a heading. The bookmarks it is in are only followed when needed */
+	var paragraphDetailsOf = (paragraphs, followBookmarks) => {
+		const bookmarks = followBookmarks ? bookmarksOf(paragraphs) : [];
+		return paragraphs.map((element, index) => {
+			var _bookmarks$index;
+			const properties = childOf(element, "w:pPr");
+			return {
+				element,
+				styleId: attributeOf(childOf(properties, "w:pStyle"), "w:val"),
+				outlineLevel: numberAttributeOf(childOf(properties, "w:outlineLvl"), "w:val"),
+				text: textOf(element),
+				bookmarks: (_bookmarks$index = bookmarks[index]) !== null && _bookmarks$index !== void 0 ? _bookmarks$index : /* @__PURE__ */ new Set()
+			};
+		});
+	};
+	/** The document's paragraph styles, by id, read from the styles as they are written */
+	var stylesOf = (context) => {
+		var _context$file;
+		const styles = (_context$file = context.file) === null || _context$file === void 0 || (_context$file = _context$file.Styles) === null || _context$file === void 0 ? void 0 : _context$file.prepForXml(context);
+		return new Map(childrenOf(styles).filter((style) => nameOf$1(style) === "w:style" && ["paragraph", void 0].includes(attributeOf(style, "w:type"))).map((style) => [attributeOf(style, "w:styleId"), {
+			name: attributeOf(childOf(style, "w:name"), "w:val"),
+			basedOn: attributeOf(childOf(style, "w:basedOn"), "w:val"),
+			outlineLevel: numberAttributeOf(childOf(childOf(style, "w:pPr"), "w:outlineLvl"), "w:val")
+		}]));
+	};
+	/** A range such as `1-3` */
+	var parseRange = (range) => {
+		const match = /^\s*(\d+)\s*-\s*(\d+)\s*$/.exec(range);
+		return match ? [Number(match[1]), Number(match[2])] : void 0;
+	};
+	var isWithin = (level, [from, to]) => level >= from && level <= to;
+	/** The level of a built-in heading style, Heading 1 to Heading 9, by its name, or by its id when it has no name */
+	var headingLevelOf = (styleId, styles) => {
+		var _styles$get$name, _styles$get;
+		if (styleId === void 0) return;
+		const match = /^heading ?([1-9])$/i.exec((_styles$get$name = (_styles$get = styles.get(styleId)) === null || _styles$get === void 0 ? void 0 : _styles$get.name) !== null && _styles$get$name !== void 0 ? _styles$get$name : styleId);
+		return match ? Number(match[1]) : void 0;
+	};
+	/**
+	* A style's outline level, from 0: its own, or else the one of the style it is based on. A built-in heading style has
+	* its heading's. Following the styles it is based on stops after as many as there are, in case they loop.
+	*/
+	var styleOutlineLevelOf = (styleId, styles, depth = 0) => {
+		var _style$outlineLevel;
+		if (styleId === void 0 || depth > styles.size) return;
+		const style = styles.get(styleId);
+		const heading = headingLevelOf(styleId, styles);
+		return (_style$outlineLevel = style === null || style === void 0 ? void 0 : style.outlineLevel) !== null && _style$outlineLevel !== void 0 ? _style$outlineLevel : heading === void 0 ? styleOutlineLevelOf(style === null || style === void 0 ? void 0 : style.basedOn, styles, depth + 1) : heading - 1;
+	};
+	/** A paragraph's outline level, from 0: its own, or else its style's */
+	var outlineLevelOf = (paragraph, styles) => {
+		var _paragraph$outlineLev;
+		return (_paragraph$outlineLev = paragraph.outlineLevel) !== null && _paragraph$outlineLev !== void 0 ? _paragraph$outlineLev : styleOutlineLevelOf(paragraph.styleId, styles);
+	};
+	/** The level a table of contents gives a paragraph, or undefined when it doesn't include it */
+	var levelIn = (properties, paragraph, styles) => {
+		var _styles$get2;
+		const { entriesFromBookmark, headingStyleRange, stylesWithLevels = [], useAppliedParagraphOutlineLevel } = properties;
+		if (paragraph.text.trim() === "" || entriesFromBookmark && !paragraph.bookmarks.has(entriesFromBookmark)) return;
+		const names = [paragraph.styleId, paragraph.styleId === void 0 ? void 0 : (_styles$get2 = styles.get(paragraph.styleId)) === null || _styles$get2 === void 0 ? void 0 : _styles$get2.name].filter((name) => name !== void 0).map((name) => name.toLowerCase());
+		const listed = stylesWithLevels.find((style) => names.includes(style.styleName.toLowerCase()));
+		if (listed) return listed.level;
+		const namesItsEntries = Boolean(headingStyleRange) || stylesWithLevels.length > 0 || Boolean(useAppliedParagraphOutlineLevel) || Boolean(properties.tcFieldIdentifier) || Boolean(properties.tcFieldLevelRange) || Boolean(properties.captionLabel) || Boolean(properties.captionLabelIncludingNumbers);
+		const headingRange = headingStyleRange ? parseRange(headingStyleRange) : namesItsEntries ? void 0 : [1, 9];
+		const heading = headingLevelOf(paragraph.styleId, styles);
+		if (headingRange && heading !== void 0 && isWithin(heading, headingRange)) return heading;
+		const outlineLevel = useAppliedParagraphOutlineLevel ? outlineLevelOf(paragraph, styles) : void 0;
+		return outlineLevel !== void 0 && isWithin(outlineLevel + 1, headingRange !== null && headingRange !== void 0 ? headingRange : [1, 9]) ? outlineLevel + 1 : void 0;
+	};
+	/** The runs of an entry's title. Tabs and line breaks are kept only when the table of contents keeps them (\w and \x) */
+	var titleRunsOf = (title, properties) => {
+		const text = properties.preserveTabInEntries ? title : title.replace(/\t/g, " ");
+		return (properties.preserveNewLineInEntries ? text.split("\n") : [text.replace(/\n/g, " ")]).map((line, index) => new TextRun({
+			break: index > 0 ? 1 : void 0,
+			children: line.split("	").flatMap((part, partIndex) => [...partIndex > 0 ? [new Tab()] : [], ...part === "" ? [] : [part]])
+		}));
+	};
+	/**
+	* The paragraph style of the entries at a level: the built-in TOC style, found by its name, "toc 1" to "toc 9". When
+	* the document doesn't have it, the entries are indented as Word's are, 220 twips a level.
+	*/
+	var entryStyleOf = (level, styles) => {
+		var _find;
+		const named = (_find = [...styles].find(([, style]) => {
+			var _style$name;
+			return ((_style$name = style.name) === null || _style$name === void 0 ? void 0 : _style$name.toLowerCase()) === `toc ${level}`;
+		})) === null || _find === void 0 ? void 0 : _find[0];
+		const id = named !== null && named !== void 0 ? named : `TOC${level}`;
+		return named !== void 0 || styles.has(id) || level === 1 ? { id } : {
+			id,
+			indent: (level - 1) * 220
+		};
+	};
+	/** The formatted content of a table of contents with its entries */
+	var contentOf = ({ properties, beginDirty, textWidth }, entries, styles, context) => {
+		var _parseRange;
+		const withoutPageNumbers = properties.pageNumbersEntryLevelsRange ? (_parseRange = parseRange(properties.pageNumbersEntryLevelsRange)) !== null && _parseRange !== void 0 ? _parseRange : [1, 9] : void 0;
+		const content = new StructuredDocumentTagContent();
+		entries.forEach((entry, index) => {
+			const hasPageNumber = withoutPageNumbers === void 0 || !isWithin(entry.level, withoutPageNumbers);
+			const children = [...titleRunsOf(entry.title, properties), ...hasPageNumber ? [new TextRun({ children: [properties.entryAndPageNumberSeparator || new Tab()] }), new PageReference(entry.bookmark, { hyperlink: properties.hyperlink })] : []];
+			const style = entryStyleOf(entry.level, styles);
+			content.addChildElement(new Paragraph({
+				style: style.id,
+				indent: style.indent === void 0 ? void 0 : { left: style.indent },
+				tabStops: [{
+					type: "right",
+					position: textWidth,
+					leader: "dot"
+				}],
+				children: [...index === 0 ? [new Run({ children: [
+					createBegin(beginDirty),
+					new FieldInstruction(properties),
+					createSeparate()
+				] })] : [], ...properties.hyperlink ? [new InternalHyperlink({
+					anchor: entry.bookmark,
+					children
+				})] : children]
+			}));
+		});
+		content.addChildElement(new Paragraph({ children: [new Run({ children: [createEnd()] })] }));
+		return content.prepForXml(context);
+	};
+	/** Puts a bookmark around the content of a formatted paragraph */
+	var bookmark = (paragraph, name, id, context) => {
+		const children = childrenOf(paragraph);
+		const start = children.findIndex((child) => nameOf$1(child) === "w:pPr") + 1;
+		paragraph["w:p"] = [
+			...children.slice(0, start),
+			new BookmarkStart(name, id).prepForXml(context),
+			...children.slice(start),
+			new BookmarkEnd(id).prepForXml(context)
+		];
+	};
+	/**
+	* Fills in the tables of contents in a formatted body from its headings, and bookmarks the headings they list. A
+	* table of contents that doesn't list any heading is left empty, for Word to fill in.
+	*/
+	var fillTablesOfContents = (body, context, bookmarkIds) => {
+		const blocks = blocksOf(childrenOf(body));
+		const tables = blocks.flatMap((block) => {
+			const options = writtenTables.get(block);
+			return options ? [[block, options]] : [];
+		});
+		if (tables.length === 0) return;
+		const styles = stylesOf(context);
+		const followBookmarks = tables.some(([, { properties }]) => Boolean(properties.entriesFromBookmark));
+		const headings = paragraphDetailsOf(blocks.filter((block) => nameOf$1(block) === "w:p"), followBookmarks).map((paragraph) => ({
+			paragraph,
+			levels: tables.map(([, { properties }]) => levelIn(properties, paragraph, styles))
+		})).filter(({ levels }) => levels.some((level) => level !== void 0)).map((heading, index) => _objectSpread2(_objectSpread2({}, heading), {}, { id: bookmarkIds.get(index) }));
+		for (const { paragraph, id } of headings) bookmark(paragraph.element, `_Toc${id}`, id, context);
+		tables.forEach(([table, options], index) => {
+			const entries = headings.flatMap(({ paragraph, levels, id }) => {
+				const level = levels[index];
+				return level === void 0 ? [] : [{
+					title: paragraph.text,
+					level,
+					bookmark: `_Toc${id}`
+				}];
+			});
+			if (entries.length === 0) return;
+			table["w:sdt"] = childrenOf(table).map((child) => nameOf$1(child) === "w:sdtContent" ? contentOf(options, entries, styles, context) : child);
+		});
+	};
+	//#endregion
 	//#region src/file/vertical-align/vertical-align.ts
 	/**
 	* Vertical alignment module for WordprocessingML documents.
@@ -21965,6 +22409,7 @@ MAX: 9026 };
 				"sectionParagraphs",
 				/* @__PURE__ */ new Map()
 			);
+			_defineProperty(this, "headingBookmarkIds", new HeadingBookmarkIds());
 		}
 		/**
 		* Finds the section properties that govern a top-level child of the body.
@@ -22012,7 +22457,8 @@ MAX: 9026 };
 		* Prepares the body element for XML serialization.
 		*
 		* Ensures that the last section's properties are placed as a direct child of the body
-		* element, as required by the OOXML specification.
+		* element, as required by the OOXML specification. Once the body is written, its tables
+		* of contents are filled in from its headings.
 		*
 		* @param context - The XML serialization context
 		* @returns The prepared XML object or undefined
@@ -22022,7 +22468,9 @@ MAX: 9026 };
 				this.root.splice(0, 1);
 				this.root.push(this.sections.pop());
 			}
-			return super.prepForXml(context);
+			const xml = super.prepForXml(context);
+			fillTablesOfContents(xml, context, this.headingBookmarkIds);
+			return xml;
 		}
 		/**
 		* Adds a block-level component to the body.
@@ -24774,7 +25222,7 @@ MAX: 9026 };
 			for (const property of properties) this.addCustomProperty(property);
 		}
 		prepForXml(context) {
-			this.properties.forEach((x) => this.root.push(x));
+			this.root.splice(1, this.root.length - 1, ...this.properties);
 			return super.prepForXml(context);
 		}
 		addCustomProperty(property) {
@@ -27002,8 +27450,7 @@ MAX: 9026 };
 		* @returns The prepared XML object
 		*/
 		prepForXml(context) {
-			for (const numbering of this.abstractNumberingMap.values()) this.root.push(numbering);
-			for (const numbering of this.concreteNumberingMap.values()) this.root.push(numbering);
+			this.root.splice(1, this.root.length - 1, ...this.abstractNumberingMap.values(), ...this.concreteNumberingMap.values());
 			return super.prepForXml(context);
 		}
 		/**
@@ -27432,6 +27879,7 @@ MAX: 9026 };
 	* ```xml
 	* <xsd:complexType name="CT_Settings">
 	*   <xsd:sequence>
+	*     <xsd:element name="embedTrueTypeFonts" type="CT_OnOff" minOccurs="0"/>
 	*     <xsd:element name="trackRevisions" type="CT_OnOff" minOccurs="0"/>
 	*     <xsd:element name="defaultTabStop" type="CT_TwipsMeasure" minOccurs="0"/>
 	*     <xsd:element name="autoHyphenation" type="CT_OnOff" minOccurs="0"/>
@@ -27490,6 +27938,7 @@ MAX: 9026 };
 				Ignorable: "w14 w15 wp14"
 			}));
 			this.root.push(new OnOffElement("w:displayBackgroundShape", true));
+			if (options.embedFonts !== void 0) this.root.push(new OnOffElement("w:embedTrueTypeFonts", options.embedFonts));
 			if (options.trackRevisions !== void 0) this.root.push(new OnOffElement("w:trackRevisions", options.trackRevisions));
 			if (options.defaultTabStop !== void 0) this.root.push(new NumberValueElement("w:defaultTabStop", options.defaultTabStop));
 			if (((_options$hyphenation = options.hyphenation) === null || _options$hyphenation === void 0 ? void 0 : _options$hyphenation.autoHyphenation) !== void 0) this.root.push(new OnOffElement("w:autoHyphenation", options.hyphenation.autoHyphenation));
@@ -29044,7 +29493,7 @@ MAX: 9026 };
 	*/
 	var File = class {
 		constructor(options) {
-			var _options$creator, _options$revision, _options$lastModified, _options$comments, _options$customProper, _options$features, _options$features2, _options$hyphenation, _options$hyphenation2, _options$hyphenation3, _options$hyphenation4, _options$fonts;
+			var _options$creator, _options$revision, _options$lastModified, _options$comments, _options$customProper, _options$features, _options$features2, _options$fonts, _options$hyphenation, _options$hyphenation2, _options$hyphenation3, _options$hyphenation4, _options$fonts2;
 			_defineProperty(this, "currentRelationshipId", 1);
 			_defineProperty(this, "documentWrapper", void 0);
 			_defineProperty(this, "headers", []);
@@ -29099,6 +29548,7 @@ MAX: 9026 };
 				evenAndOddHeaders: options.evenAndOddHeaderAndFooters ? true : false,
 				trackRevisions: (_options$features = options.features) === null || _options$features === void 0 ? void 0 : _options$features.trackRevisions,
 				updateFields: (_options$features2 = options.features) === null || _options$features2 === void 0 ? void 0 : _options$features2.updateFields,
+				embedFonts: ((_options$fonts = options.fonts) === null || _options$fonts === void 0 ? void 0 : _options$fonts.length) ? true : void 0,
 				defaultTabStop: options.defaultTabStop,
 				hyphenation: {
 					autoHyphenation: (_options$hyphenation = options.hyphenation) === null || _options$hyphenation === void 0 ? void 0 : _options$hyphenation.autoHyphenation,
@@ -29134,7 +29584,7 @@ MAX: 9026 };
 			for (const section of options.sections) this.addSection(section);
 			if (options.footnotes) for (const key in options.footnotes) this.footnotesWrapper.View.createFootNote(parseFloat(key), options.footnotes[key].children);
 			if (options.endnotes) for (const key in options.endnotes) this.endnotesWrapper.View.createEndnote(parseFloat(key), options.endnotes[key].children);
-			this.fontWrapper = new FontWrapper((_options$fonts = options.fonts) !== null && _options$fonts !== void 0 ? _options$fonts : []);
+			this.fontWrapper = new FontWrapper((_options$fonts2 = options.fonts) !== null && _options$fonts2 !== void 0 ? _options$fonts2 : []);
 			this.theme = new Theme(options.theme);
 			this.documentWrapper.Relationships.addRelationship(this.currentRelationshipId++, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme", "theme/theme1.xml");
 		}
@@ -29270,113 +29720,6 @@ MAX: 9026 };
 		}
 	};
 	//#endregion
-	//#region src/file/table-of-contents/field-instruction.ts
-	/**
-	* Field Instruction module for Table of Contents.
-	*
-	* This module handles the generation of TOC field instruction text
-	* that controls how the table of contents is built.
-	*
-	* Reference: http://officeopenxml.com/WPfieldInstructions.php
-	*
-	* @module
-	*/
-	/**
-	* Represents a field instruction for a Table of Contents.
-	*
-	* The FieldInstruction class generates the TOC field code string that Word uses
-	* to determine how to build the table of contents, including which headings to include,
-	* formatting options, and other TOC-specific settings.
-	*
-	* Reference: http://officeopenxml.com/WPfieldInstructions.php
-	*
-	* ## XSD Schema
-	* ```xml
-	* <xsd:element name="instrText" type="CT_Text"/>
-	* ```
-	*
-	* @example
-	* ```typescript
-	* // Basic TOC field instruction
-	* new FieldInstruction({ headingStyleRange: "1-3" });
-	*
-	* // TOC with hyperlinks and custom styles
-	* new FieldInstruction({
-	*   hyperlink: true,
-	*   headingStyleRange: "1-3",
-	*   stylesWithLevels: [new StyleLevel("CustomStyle", 2)],
-	* });
-	* ```
-	*/
-	var FieldInstruction = class extends XmlComponent {
-		constructor(properties = {}) {
-			super("w:instrText");
-			_defineProperty(this, "properties", void 0);
-			this.properties = properties;
-			this.root.push(new TextAttributes({ space: SpaceType.PRESERVE }));
-			let instruction = "TOC";
-			if (this.properties.captionLabel) instruction = `${instruction} \\a "${this.properties.captionLabel}"`;
-			if (this.properties.entriesFromBookmark) instruction = `${instruction} \\b "${this.properties.entriesFromBookmark}"`;
-			if (this.properties.captionLabelIncludingNumbers) instruction = `${instruction} \\c "${this.properties.captionLabelIncludingNumbers}"`;
-			if (this.properties.sequenceAndPageNumbersSeparator) instruction = `${instruction} \\d "${this.properties.sequenceAndPageNumbersSeparator}"`;
-			if (this.properties.tcFieldIdentifier) instruction = `${instruction} \\f "${this.properties.tcFieldIdentifier}"`;
-			if (this.properties.hyperlink) instruction = `${instruction} \\h`;
-			if (this.properties.tcFieldLevelRange) instruction = `${instruction} \\l "${this.properties.tcFieldLevelRange}"`;
-			if (this.properties.pageNumbersEntryLevelsRange) instruction = `${instruction} \\n "${this.properties.pageNumbersEntryLevelsRange}"`;
-			if (this.properties.headingStyleRange) instruction = `${instruction} \\o "${this.properties.headingStyleRange}"`;
-			if (this.properties.entryAndPageNumberSeparator) instruction = `${instruction} \\p "${this.properties.entryAndPageNumberSeparator}"`;
-			if (this.properties.seqFieldIdentifierForPrefix) instruction = `${instruction} \\s "${this.properties.seqFieldIdentifierForPrefix}"`;
-			if (this.properties.stylesWithLevels && this.properties.stylesWithLevels.length) {
-				const styles = this.properties.stylesWithLevels.map((sl) => `${sl.styleName},${sl.level}`).join(",");
-				instruction = `${instruction} \\t "${styles}"`;
-			}
-			if (this.properties.useAppliedParagraphOutlineLevel) instruction = `${instruction} \\u`;
-			if (this.properties.preserveTabInEntries) instruction = `${instruction} \\w`;
-			if (this.properties.preserveNewLineInEntries) instruction = `${instruction} \\x`;
-			if (this.properties.hideTabAndPageNumbersInWebView) instruction = `${instruction} \\z`;
-			this.root.push(instruction);
-		}
-	};
-	//#endregion
-	//#region src/file/table-of-contents/sdt-content.ts
-	/**
-	* Structured Document Tag Content module.
-	*
-	* This module represents the content container for structured document tags,
-	* including table of contents elements.
-	*
-	* Reference: http://officeopenxml.com/WPtableOfContents.php
-	*
-	* @module
-	*/
-	/**
-	* Represents the content portion of a Structured Document Tag.
-	*
-	* The StructuredDocumentTagContent contains the actual content elements
-	* (paragraphs, tables, etc.) within a structured document tag, such as
-	* the paragraphs that make up a table of contents.
-	*
-	* Reference: http://officeopenxml.com/WPtableOfContents.php
-	*
-	* ## XSD Schema
-	* ```xml
-	* <xsd:complexType name="CT_SdtContentBlock">
-	*   <xsd:group ref="EG_ContentBlockContent" minOccurs="0" maxOccurs="unbounded"/>
-	* </xsd:complexType>
-	* ```
-	*
-	* @example
-	* ```typescript
-	* const content = new StructuredDocumentTagContent();
-	* content.addChildElement(new Paragraph("Content"));
-	* ```
-	*/
-	var StructuredDocumentTagContent = class extends XmlComponent {
-		constructor() {
-			super("w:sdtContent");
-		}
-	};
-	//#endregion
 	//#region src/file/table-of-contents/sdt-properties.ts
 	/**
 	* Structured Document Tag Properties module.
@@ -29456,6 +29799,11 @@ MAX: 9026 };
 	* TableOfContents creates an auto-generated list of document headings
 	* with page numbers. It uses a TOC field code to generate entries.
 	*
+	* Unless it is given `cachedEntries` or `contentChildren`, it is written with an
+	* entry for each heading its options include, linked to a bookmark on the heading,
+	* so it isn't empty before Word updates it or in applications that don't update it.
+	* The page numbers are left for Word to fill in when it updates the field.
+	*
 	* Reference: http://officeopenxml.com/WPtableOfContents.php
 	*
 	* @publicApi
@@ -29483,6 +29831,12 @@ MAX: 9026 };
 		constructor(alias = "Table of Contents", _ref = {}) {
 			let { contentChildren = [], cachedEntries = [], beginDirty = true } = _ref, properties = _objectWithoutProperties(_ref, _excluded$2);
 			super("w:sdt");
+			_defineProperty(
+				this,
+				/** What it is filled in with from the headings, when it isn't given its content */
+				"fromHeadings",
+				void 0
+			);
 			this.root.push(new StructuredDocumentTagProperties(alias));
 			const content = new StructuredDocumentTagContent();
 			const beginParagraphMandatoryChildren = [new Run({ children: [
@@ -29513,8 +29867,26 @@ MAX: 9026 };
 				for (const child of contentChildren) content.addChildElement(child);
 				const endParagraph = new Paragraph({ children: endParagraphMandatoryChildren });
 				content.addChildElement(endParagraph);
+				if (contentChildren.length === 0) this.fromHeadings = {
+					properties,
+					beginDirty
+				};
 			}
 			this.root.push(content);
+		}
+		/**
+		* Written empty, and filled in from the headings once the body it is in is written, unless it was given its content.
+		* The page numbers are aligned to the right of the text in its section.
+		*/
+		prepForXml(context) {
+			const xml = super.prepForXml(context);
+			recordTableOfContents(xml, this.fromHeadings && _objectSpread2(_objectSpread2({}, this.fromHeadings), {}, { textWidth: this.textWidthIn(context) }));
+			return xml;
+		}
+		/** The width of the text in the section it is in */
+		textWidthIn(context) {
+			var _context$file$Documen, _context$file;
+			return (_context$file$Documen = (_context$file = context.file) === null || _context$file === void 0 || (_context$file = _context$file.Document) === null || _context$file === void 0 || (_context$file = _context$file.View.Body.getSectionPropertiesFor(this)) === null || _context$file === void 0 ? void 0 : _context$file.AvailableTextWidth) !== null && _context$file$Documen !== void 0 ? _context$file$Documen : DEFAULT_AVAILABLE_WIDTH;
 		}
 		getTabStopsForLevel(level, pageWidth = 9025) {
 			return [{
@@ -33929,11 +34301,11 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 	*
 	* @module
 	*/
-	var formatter$2 = new Formatter();
+	var formatter$3 = new Formatter();
 	/**
 	* Formats a part's XML, with the relationships that anything in it that refers to other parts adds to.
 	*/
-	var xmlifyPart = (file, content, prettify, relationships, standalone = true) => (0, import_xml.default)(formatter$2.format(content, {
+	var xmlifyPart = (file, content, prettify, relationships, standalone = true) => (0, import_xml.default)(formatter$3.format(content, {
 		viewWrapper: {
 			View: content,
 			Relationships: relationships
@@ -34054,7 +34426,6 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 			return zip;
 		}
 		xmlifyFile(file, prettify) {
-			const documentRelationshipCount = file.Document.Relationships.RelationshipCount + 1;
 			const documentXmlData = (0, import_xml.default)(this.formatter.format(file.Document.View, {
 				viewWrapper: file.Document,
 				file,
@@ -34066,7 +34437,6 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 					encoding: "UTF-8"
 				}
 			});
-			const commentRelationshipCount = file.Comments.Relationships.RelationshipCount + 1;
 			const commentXmlData = (0, import_xml.default)(this.formatter.format(file.Comments, {
 				viewWrapper: {
 					View: file.Comments,
@@ -34081,7 +34451,6 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 					encoding: "UTF-8"
 				}
 			});
-			const footnoteRelationshipCount = file.FootNotes.Relationships.RelationshipCount + 1;
 			const footnoteXmlData = (0, import_xml.default)(this.formatter.format(file.FootNotes.View, {
 				viewWrapper: file.FootNotes,
 				file,
@@ -34093,17 +34462,31 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 					encoding: "UTF-8"
 				}
 			});
+			const endnoteXmlData = (0, import_xml.default)(this.formatter.format(file.Endnotes.View, {
+				viewWrapper: file.Endnotes,
+				file,
+				stack: []
+			}), {
+				indent: prettify,
+				declaration: { encoding: "UTF-8" }
+			});
+			const documentRelationshipCount = file.Document.Relationships.RelationshipCount + 1;
+			const commentRelationshipCount = file.Comments.Relationships.RelationshipCount + 1;
+			const footnoteRelationshipCount = file.FootNotes.Relationships.RelationshipCount + 1;
+			const endnoteRelationshipCount = file.Endnotes.Relationships.RelationshipCount + 1;
 			const documentMediaDatas = this.imageReplacer.getMediaData(documentXmlData, file.Media);
 			const commentMediaDatas = this.imageReplacer.getMediaData(commentXmlData, file.Media);
 			const footnoteMediaDatas = this.imageReplacer.getMediaData(footnoteXmlData, file.Media);
+			const endnoteMediaDatas = this.imageReplacer.getMediaData(endnoteXmlData, file.Media);
 			return _objectSpread2(_objectSpread2(_objectSpread2(_objectSpread2({
 				Relationships: {
 					data: (() => {
+						const relationships = Relationships.copy(file.Document.Relationships);
 						documentMediaDatas.forEach((mediaData, i) => {
-							file.Document.Relationships.addRelationship(documentRelationshipCount + i, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", `media/${mediaData.fileName}`);
+							relationships.addRelationship(documentRelationshipCount + i, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", `media/${mediaData.fileName}`);
 						});
-						file.Document.Relationships.addRelationship(file.Document.Relationships.RelationshipCount + 1, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable", "fontTable.xml");
-						return (0, import_xml.default)(this.formatter.format(file.Document.Relationships, {
+						relationships.addRelationship(relationships.RelationshipCount + 1, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable", "fontTable.xml");
+						return (0, import_xml.default)(this.formatter.format(relationships, {
 							viewWrapper: file.Document,
 							file,
 							stack: []
@@ -34152,20 +34535,6 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 					}),
 					path: "docProps/core.xml"
 				},
-				Numbering: {
-					data: (0, import_xml.default)(this.formatter.format(file.Numbering, {
-						viewWrapper: file.Document,
-						file,
-						stack: []
-					}), {
-						indent: prettify,
-						declaration: {
-							standalone: "yes",
-							encoding: "UTF-8"
-						}
-					}),
-					path: "word/numbering.xml"
-				},
 				FileRelationships: {
 					data: (0, import_xml.default)(this.formatter.format(file.FileRelationships, {
 						viewWrapper: file.Document,
@@ -34186,11 +34555,13 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 						indent: prettify,
 						declaration: { encoding: "UTF-8" }
 					});
-					this.imageReplacer.getMediaData(xmlData, file.Media).forEach((mediaData, i) => {
-						headerWrapper.Relationships.addRelationship(i, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", `media/${mediaData.fileName}`);
+					const mediaDatas = this.imageReplacer.getMediaData(xmlData, file.Media);
+					const relationships = Relationships.copy(headerWrapper.Relationships);
+					mediaDatas.forEach((mediaData, i) => {
+						relationships.addRelationship(i, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", `media/${mediaData.fileName}`);
 					});
 					return {
-						data: (0, import_xml.default)(this.formatter.format(headerWrapper.Relationships, {
+						data: (0, import_xml.default)(this.formatter.format(relationships, {
 							viewWrapper: headerWrapper,
 							file,
 							stack: []
@@ -34210,11 +34581,13 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 						indent: prettify,
 						declaration: { encoding: "UTF-8" }
 					});
-					this.imageReplacer.getMediaData(xmlData, file.Media).forEach((mediaData, i) => {
-						footerWrapper.Relationships.addRelationship(i, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", `media/${mediaData.fileName}`);
+					const mediaDatas = this.imageReplacer.getMediaData(xmlData, file.Media);
+					const relationships = Relationships.copy(footerWrapper.Relationships);
+					mediaDatas.forEach((mediaData, i) => {
+						relationships.addRelationship(i, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", `media/${mediaData.fileName}`);
 					});
 					return {
-						data: (0, import_xml.default)(this.formatter.format(footerWrapper.Relationships, {
+						data: (0, import_xml.default)(this.formatter.format(relationships, {
 							viewWrapper: footerWrapper,
 							file,
 							stack: []
@@ -34294,10 +34667,11 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 				},
 				FootNotesRelationships: {
 					data: (() => {
+						const relationships = Relationships.copy(file.FootNotes.Relationships);
 						footnoteMediaDatas.forEach((mediaData, i) => {
-							file.FootNotes.Relationships.addRelationship(footnoteRelationshipCount + i, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", `media/${mediaData.fileName}`);
+							relationships.addRelationship(footnoteRelationshipCount + i, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", `media/${mediaData.fileName}`);
 						});
-						return (0, import_xml.default)(this.formatter.format(file.FootNotes.Relationships, {
+						return (0, import_xml.default)(this.formatter.format(relationships, {
 							viewWrapper: file.FootNotes,
 							file,
 							stack: []
@@ -34309,25 +34683,27 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 					path: "word/_rels/footnotes.xml.rels"
 				},
 				Endnotes: {
-					data: (0, import_xml.default)(this.formatter.format(file.Endnotes.View, {
-						viewWrapper: file.Endnotes,
-						file,
-						stack: []
-					}), {
-						indent: prettify,
-						declaration: { encoding: "UTF-8" }
-					}),
+					data: (() => {
+						const xmlData = this.imageReplacer.replace(endnoteXmlData, endnoteMediaDatas, endnoteRelationshipCount);
+						return this.numberingReplacer.replace(xmlData, file.Numbering.ConcreteNumbering);
+					})(),
 					path: "word/endnotes.xml"
 				},
 				EndnotesRelationships: {
-					data: (0, import_xml.default)(this.formatter.format(file.Endnotes.Relationships, {
-						viewWrapper: file.Endnotes,
-						file,
-						stack: []
-					}), {
-						indent: prettify,
-						declaration: { encoding: "UTF-8" }
-					}),
+					data: (() => {
+						const relationships = Relationships.copy(file.Endnotes.Relationships);
+						endnoteMediaDatas.forEach((mediaData, i) => {
+							relationships.addRelationship(endnoteRelationshipCount + i, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", `media/${mediaData.fileName}`);
+						});
+						return (0, import_xml.default)(this.formatter.format(relationships, {
+							viewWrapper: file.Endnotes,
+							file,
+							stack: []
+						}), {
+							indent: prettify,
+							declaration: { encoding: "UTF-8" }
+						});
+					})(),
 					path: "word/_rels/endnotes.xml.rels"
 				},
 				Settings: {
@@ -34354,10 +34730,11 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 				},
 				CommentsRelationships: {
 					data: (() => {
+						const relationships = Relationships.copy(file.Comments.Relationships);
 						commentMediaDatas.forEach((mediaData, i) => {
-							file.Comments.Relationships.addRelationship(commentRelationshipCount + i, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", `media/${mediaData.fileName}`);
+							relationships.addRelationship(commentRelationshipCount + i, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", `media/${mediaData.fileName}`);
 						});
-						return (0, import_xml.default)(this.formatter.format(file.Comments.Relationships, {
+						return (0, import_xml.default)(this.formatter.format(relationships, {
 							viewWrapper: {
 								View: file.Comments,
 								Relationships: file.Comments.Relationships
@@ -34444,6 +34821,20 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 					path: "word/theme/theme1.xml"
 				},
 				PackageParts: xmlifyPackageParts(file, prettify),
+				Numbering: {
+					data: (0, import_xml.default)(this.formatter.format(file.Numbering, {
+						viewWrapper: file.Document,
+						file,
+						stack: []
+					}), {
+						indent: prettify,
+						declaration: {
+							standalone: "yes",
+							encoding: "UTF-8"
+						}
+					}),
+					path: "word/numbering.xml"
+				},
 				ContentTypes: {
 					data: (0, import_xml.default)(this.formatter.format(file.ContentTypes, {
 						viewWrapper: file.Document,
@@ -34684,7 +35075,7 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 	*
 	* @module
 	*/
-	var formatter$1 = new Formatter();
+	var formatter$2 = new Formatter();
 	/**
 	* Converts XML string to JSON element structure.
 	*
@@ -34724,7 +35115,7 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 	*/
 	var createTextElementContents = (text) => {
 		var _textJson$elements$0$;
-		return (_textJson$elements$0$ = toJson((0, import_xml.default)(formatter$1.format(new Text({ text })))).elements[0].elements) !== null && _textJson$elements$0$ !== void 0 ? _textJson$elements$0$ : [];
+		return (_textJson$elements$0$ = toJson((0, import_xml.default)(formatter$2.format(new Text({ text })))).elements[0].elements) !== null && _textJson$elements$0$ !== void 0 ? _textJson$elements$0$ : [];
 	};
 	/**
 	* Adds xml:space="preserve" attribute to an element.
@@ -35172,6 +35563,149 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 		for (const { drawing, patch } of found) patch.patch(drawing, createTemplatePackage(parts, binaryParts, file, createContext(drawing.part.path)));
 	};
 	//#endregion
+	//#region src/patcher/notes.ts
+	/**
+	* Footnotes and endnotes for content inserted into an existing document.
+	*
+	* @module
+	*/
+	var formatter$1 = new Formatter();
+	var DOCUMENT_PATH = "word/document.xml";
+	var FOOTNOTES = {
+		path: "word/footnotes.xml",
+		rootName: "w:footnotes",
+		noteName: "w:footnote",
+		referenceName: "w:footnoteReference",
+		contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml",
+		relationshipType: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes",
+		create: {
+			part: () => new FootNotes(),
+			mark: () => new FootnoteRefRun(),
+			styles: () => [
+				new FootnoteText({}),
+				new FootnoteTextChar({}),
+				new FootnoteReferenceStyle({})
+			]
+		}
+	};
+	var ENDNOTES = {
+		path: "word/endnotes.xml",
+		rootName: "w:endnotes",
+		noteName: "w:endnote",
+		referenceName: "w:endnoteReference",
+		contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml",
+		relationshipType: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes",
+		create: {
+			part: () => new Endnotes(),
+			mark: () => new EndnoteRefRun(),
+			styles: () => [
+				new EndnoteText({}),
+				new EndnoteTextChar({}),
+				new EndnoteReferenceStyle({})
+			]
+		}
+	};
+	var formatElement = (component, context) => toJson((0, import_xml.default)(formatter$1.format(component, context))).elements[0];
+	var findIds = (element, names) => {
+		var _element$name, _element$attributes, _element$elements;
+		const id = names.includes((_element$name = element.name) !== null && _element$name !== void 0 ? _element$name : "") ? Number((_element$attributes = element.attributes) === null || _element$attributes === void 0 ? void 0 : _element$attributes["w:id"]) : NaN;
+		return [...Number.isInteger(id) ? [id] : [], ...((_element$elements = element.elements) !== null && _element$elements !== void 0 ? _element$elements : []).flatMap((child) => findIds(child, names))];
+	};
+	var withMark = (paragraph, mark) => {
+		var _paragraph$elements, _elements$;
+		const elements = (_paragraph$elements = paragraph.elements) !== null && _paragraph$elements !== void 0 ? _paragraph$elements : [];
+		const index = ((_elements$ = elements[0]) === null || _elements$ === void 0 ? void 0 : _elements$.name) === "w:pPr" ? 1 : 0;
+		return _objectSpread2(_objectSpread2({}, paragraph), {}, { elements: [
+			...elements.slice(0, index),
+			mark,
+			...elements.slice(index)
+		] });
+	};
+	var patchNotesOfKind = (kind, notes, parts, { createContext, addContentTypeOverride, renumberBookmarks }) => {
+		const givenNotes = new Map(Object.entries(notes).map(([id, note]) => [Number(id), note]));
+		const noteOfId = /* @__PURE__ */ new Map();
+		let highestId;
+		const renumber = (element) => {
+			var _element$attributes2, _highestId;
+			const note = element.name === kind.referenceName ? givenNotes.get(Number((_element$attributes2 = element.attributes) === null || _element$attributes2 === void 0 ? void 0 : _element$attributes2["w:id"])) : void 0;
+			if (note === void 0) return element.elements === void 0 ? element : _objectSpread2(_objectSpread2({}, element), {}, { elements: element.elements.map(renumber) });
+			highestId = ((_highestId = highestId) !== null && _highestId !== void 0 ? _highestId : [...parts.values()].flatMap((part) => findIds(part, [kind.noteName, kind.referenceName])).reduce((highest, id) => Math.max(highest, id), 0)) + 1;
+			noteOfId.set(highestId, note);
+			return _objectSpread2(_objectSpread2({}, element), {}, { attributes: _objectSpread2(_objectSpread2({}, element.attributes), {}, { "w:id": String(highestId) }) });
+		};
+		const findOrAddPart = () => {
+			var _parts$get;
+			const relationship = getFirstLevelElements((_parts$get = parts.get(relationshipsPathOf(DOCUMENT_PATH))) !== null && _parts$get !== void 0 ? _parts$get : {}, "Relationships").find((element) => {
+				var _element$attributes3;
+				return ((_element$attributes3 = element.attributes) === null || _element$attributes3 === void 0 ? void 0 : _element$attributes3.Type) === kind.relationshipType;
+			});
+			const path = relationship ? resolveTarget(DOCUMENT_PATH, String(relationship.attributes.Target)) : kind.path;
+			if (!parts.has(path)) {
+				parts.set(path, {
+					declaration: { attributes: {
+						version: "1.0",
+						encoding: "UTF-8",
+						standalone: "yes"
+					} },
+					elements: [formatElement(kind.create.part(), createContext(path))]
+				});
+				addContentTypeOverride(kind.contentType, `/${path}`);
+			}
+			if (!relationship) createContext(DOCUMENT_PATH).viewWrapper.Relationships.addRelationship(uniqueId(), kind.relationshipType, relativeTarget(DOCUMENT_PATH, path));
+			return path;
+		};
+		const write = () => {
+			if (noteOfId.size === 0) return;
+			const path = findOrAddPart();
+			const context = createContext(path);
+			const contentOfNote = new Map([...new Set(noteOfId.values())].map((note) => {
+				const mark = formatElement(kind.create.mark(), context);
+				return [note, renumberBookmarks(note.children.map((paragraph) => formatElement(paragraph, context)).map((paragraph, index) => index === 0 ? withMark(paragraph, mark) : paragraph))];
+			}));
+			getFirstLevelElements(parts.get(path), kind.rootName).push(...[...noteOfId].map(([id, note]) => ({
+				type: "element",
+				name: kind.noteName,
+				attributes: { "w:id": String(id) },
+				elements: [...contentOfNote.get(note)]
+			})));
+			const stylesPart = parts.get("word/styles.xml");
+			if (stylesPart) {
+				const styles = getFirstLevelElements(stylesPart, "w:styles");
+				const styleIds = new Set(styles.map((style) => {
+					var _style$attributes;
+					return (_style$attributes = style.attributes) === null || _style$attributes === void 0 ? void 0 : _style$attributes["w:styleId"];
+				}));
+				styles.push(...kind.create.styles().map((style) => formatElement(style, context)).filter((style) => {
+					var _style$attributes2;
+					return !styleIds.has((_style$attributes2 = style.attributes) === null || _style$attributes2 === void 0 ? void 0 : _style$attributes2["w:styleId"]);
+				}));
+			}
+		};
+		return {
+			renumber: (elements) => elements.map(renumber),
+			write
+		};
+	};
+	/**
+	* Creates the writer of the footnotes and endnotes that patches refer to.
+	*
+	* A patch refers to a note with a reference run, such as `new FootnoteReferenceRun(1)`, whose id is the note's in
+	* `footnotes`. Only references to the given notes are renumbered, and only the notes that are referred to are written.
+	*
+	* @param notes - The footnotes and endnotes, by the id the patches' reference runs are given
+	* @param parts - The document's XML parts, parsed, by their paths, which the notes are written to
+	* @param helpers - The patcher's helpers for what the notes refer to
+	*/
+	var patchNotes = ({ footnotes = {}, endnotes = {} }, parts, helpers) => {
+		const patchers = [patchNotesOfKind(FOOTNOTES, footnotes, parts, helpers), patchNotesOfKind(ENDNOTES, endnotes, parts, helpers)];
+		return {
+			renumber: (elements) => patchers.reduce((renumbered, patcher) => patcher.renumber(renumbered), elements),
+			write: () => {
+				for (const patcher of patchers) patcher.write();
+			}
+		};
+	};
+	//#endregion
 	//#region src/patcher/paragraph-split-inject.ts
 	var TokenNotFoundError = class extends Error {
 		constructor(token) {
@@ -35473,10 +36007,11 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 	* @param context - The document context for formatting
 	* @param keepOriginalStyles - Whether to preserve original text formatting
 	* @param recursive - Whether to replace every occurrence in a paragraph, rather than only the first
-	* @param renumberBookmarks - Renumbers the bookmarks the patch inserts, so they don't take an id the document uses
+	* @param renumberIds - Renumbers the bookmarks and note references the patch inserts, so they don't take an id the
+	* document uses
 	* @returns Result containing the modified element and whether a replacement occurred
 	*/
-	var replacer = ({ json, patch, patchText, context, keepOriginalStyles = true, recursive = true, renumberBookmarks = (elements) => elements }) => {
+	var replacer = ({ json, patch, patchText, context, keepOriginalStyles = true, recursive = true, renumberIds = (elements) => elements }) => {
 		const renderedParagraphs = findLocationOfText(json, patchText);
 		if (renderedParagraphs.length === 0) return {
 			element: json,
@@ -35488,7 +36023,7 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 			case PatchType.DOCUMENT: {
 				const parentElement = goToParentElementFromPath(json, renderedParagraph.pathToParagraph);
 				const elementIndex = getLastElementIndexFromPath(renderedParagraph.pathToParagraph);
-				parentElement.elements.splice(elementIndex, 1, ...formatChildren(patch, context, renumberBookmarks));
+				parentElement.elements.splice(elementIndex, 1, ...formatChildren(patch, context, renumberIds));
 				break;
 			}
 			case PatchType.PARAGRAPH:
@@ -35502,7 +36037,7 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 						renderedParagraph: paragraph,
 						patchText,
 						fromIndex,
-						children: formatChildren(patch, context, renumberBookmarks),
+						children: formatChildren(patch, context, renumberIds),
 						keepOriginalStyles
 					});
 					paragraph = renderParagraphNode({
@@ -35520,7 +36055,7 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 			didFindOccurrence: true
 		};
 	};
-	var formatChildren = (patch, context, renumberBookmarks) => renumberBookmarks(patch.children.flatMap((c) => {
+	var formatChildren = (patch, context, renumberIds) => renumberIds(patch.children.flatMap((c) => {
 		var _c$writtenAs;
 		return (_c$writtenAs = c.writtenAs) !== null && _c$writtenAs !== void 0 ? _c$writtenAs : c;
 	}).map((c) => toJson((0, import_xml.default)(formatter.format(c, context)))).map((c) => c.elements[0]));
@@ -35782,7 +36317,7 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 		var _ref = _asyncToGenerator(function* ({ outputType, data, patches, keepOriginalStyles, placeholderDelimiters = {
 			start: "{{",
 			end: "}}"
-		}, recursive = true }) {
+		}, recursive = true, footnotes, endnotes }) {
 			const zipContent = data instanceof import_jszip_min.default ? data : yield import_jszip_min.default.loadAsync(data);
 			const contexts = /* @__PURE__ */ new Map();
 			const themeColors = yield readThemeColors(zipContent);
@@ -35845,6 +36380,17 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 				} } },
 				stack: []
 			});
+			const notes = patchNotes({
+				footnotes,
+				endnotes
+			}, map, {
+				createContext,
+				addContentTypeOverride: (contentType, partName) => contentTypeOverrides.push({
+					contentType,
+					partName
+				}),
+				renumberBookmarks
+			});
 			patchDrawings({
 				parts: map,
 				binaryParts: binaryContentMap,
@@ -35881,10 +36427,14 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 						context,
 						keepOriginalStyles,
 						recursive,
-						renumberBookmarks
+						renumberIds: (elements) => notes.renumber(renumberBookmarks(elements))
 					});
 				}
-				const mediaDatas = imageReplacer.getMediaData(JSON.stringify(json), context.file.Media);
+			}
+			notes.write();
+			for (const [key, json] of map) {
+				if (!key.startsWith("word/") || key.endsWith(".xml.rels")) continue;
+				const mediaDatas = imageReplacer.getMediaData(JSON.stringify(json), file.Media);
 				if (mediaDatas.length > 0) {
 					hasMedia = true;
 					imageRelationshipAdditions.push({

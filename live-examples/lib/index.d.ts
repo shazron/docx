@@ -103,11 +103,11 @@ export declare const abstractNumUniqueNumericIdGen: () => UniqueNumericIdCreator
  * @publicApi
  */
 export declare const AlignmentType: {
-    /** Align Start */
+    /** Align Start: the left in a left-to-right paragraph, and the right in a `bidirectional` (right-to-left) paragraph */
     readonly START: "start";
     /** Align Center */
     readonly CENTER: "center";
-    /** End */
+    /** Align End: the right in a left-to-right paragraph, and the left in a `bidirectional` (right-to-left) paragraph */
     readonly END: "end";
     /** Justified */
     readonly BOTH: "both";
@@ -123,9 +123,9 @@ export declare const AlignmentType: {
     readonly LOW_KASHIDA: "lowKashida";
     /** Thai Language Justification */
     readonly THAI_DISTRIBUTE: "thaiDistribute";
-    /** Align Left */
+    /** Align Left: a paragraph stays on the left of the page even when it is `bidirectional` (right-to-left) */
     readonly LEFT: "left";
-    /** Align Right */
+    /** Align Right: a paragraph stays on the right of the page even when it is `bidirectional` (right-to-left) */
     readonly RIGHT: "right";
     /** Justified */
     readonly JUSTIFIED: "both";
@@ -386,6 +386,7 @@ declare class Body_2 extends XmlComponent {
      * governs a given child of the body.
      */
     private readonly sectionParagraphs;
+    private readonly headingBookmarkIds;
     constructor();
     /**
      * Finds the section properties that govern a top-level child of the body.
@@ -418,7 +419,8 @@ declare class Body_2 extends XmlComponent {
      * Prepares the body element for XML serialization.
      *
      * Ensures that the last section's properties are placed as a direct child of the body
-     * element, as required by the OOXML specification.
+     * element, as required by the OOXML specification. Once the body is written, its tables
+     * of contents are filled in from its headings.
      *
      * @param context - The XML serialization context
      * @returns The prepared XML object or undefined
@@ -6462,7 +6464,11 @@ export declare type IParagraphPropertiesOptions = {
 export declare type IParagraphPropertiesOptionsBase = {
     /** Heading level (Heading1, Heading2, etc.) - applies predefined heading style */
     readonly heading?: (typeof HeadingLevel)[keyof typeof HeadingLevel];
-    /** Whether to render text right-to-left for bidirectional languages */
+    /**
+     * Whether to lay the paragraph out right-to-left, for languages such as Arabic and Hebrew.
+     * A right-to-left paragraph starts on the right of the page, so it is right-aligned unless `alignment` says otherwise.
+     * `alignment` `LEFT` and `RIGHT` still mean those sides of the page, while `START` and `END` follow the paragraph's direction.
+     */
     readonly bidirectional?: boolean;
     /** Whether to insert a page break before this paragraph */
     readonly pageBreakBefore?: boolean;
@@ -6818,6 +6824,8 @@ declare type ISettingsOptions = {
     readonly trackRevisions?: boolean;
     /** Update fields when document is opened */
     readonly updateFields?: boolean;
+    /** Keep the document's embedded fonts when it is saved again, as Word's "Embed fonts in the file" option does */
+    readonly embedFonts?: boolean;
     /** Compatibility settings for older Word versions */
     readonly compatibility?: ICompatibilityOptions;
     /** Default distance between tab stops in twips */
@@ -10459,7 +10467,7 @@ declare type PatchDetectorOptions = {
  *
  * @publicApi
  */
-export declare const patchDocument: <T extends PatchDocumentOutputType = PatchDocumentOutputType>({ outputType, data, patches, keepOriginalStyles, placeholderDelimiters, recursive, }: PatchDocumentOptions<T>) => Promise<OutputByType[T]>;
+export declare const patchDocument: <T extends PatchDocumentOutputType = PatchDocumentOutputType>({ outputType, data, patches, keepOriginalStyles, placeholderDelimiters, recursive, footnotes, endnotes, }: PatchDocumentOptions<T>) => Promise<OutputByType[T]>;
 
 /**
  * Options for patching a document.
@@ -10470,6 +10478,8 @@ export declare const patchDocument: <T extends PatchDocumentOutputType = PatchDo
  * @property keepOriginalStyles - Whether to preserve original text formatting
  * @property placeholderDelimiters - Custom delimiter characters for placeholders
  * @property recursive - Whether to replace every occurrence of a placeholder in a paragraph, rather than only the first
+ * @property footnotes - The footnotes that patches refer to with a `FootnoteReferenceRun`
+ * @property endnotes - The endnotes that patches refer to with an `EndnoteReferenceRun`
  */
 export declare type PatchDocumentOptions<T extends PatchDocumentOutputType = PatchDocumentOutputType> = {
     /** Output format type */
@@ -10490,6 +10500,17 @@ export declare type PatchDocumentOptions<T extends PatchDocumentOutputType = Pat
     }>;
     /** Replace every occurrence of a placeholder in a paragraph, rather than only the first (default: true) */
     readonly recursive?: boolean;
+    /**
+     * The footnotes that patches refer to, by the id given to their `FootnoteReferenceRun`s, as in a `Document`. Each
+     * reference a patch inserts gets a footnote of its own, with an id that none of the document's footnotes have
+     */
+    readonly footnotes?: Readonly<Record<string, {
+        readonly children: readonly Paragraph[];
+    }>>;
+    /** The endnotes that patches refer to, by the id given to their `EndnoteReferenceRun`s, as with footnotes */
+    readonly endnotes?: Readonly<Record<string, {
+        readonly children: readonly Paragraph[];
+    }>>;
 };
 
 /**
@@ -10815,6 +10836,16 @@ declare class Relationships extends XmlComponent {
      * @param targetMode - Optional mode indicating if target is external
      */
     addRelationship(id: number | string, type: RelationshipType, target: string, targetMode?: (typeof TargetModeType)[keyof typeof TargetModeType]): void;
+    /**
+     * Creates a copy of the relationships given. Relationships added to the copy aren't added to them, so the compiler
+     * adds the ones it writes for a part, such as to its images, to a copy, and packing a document again doesn't add
+     * them a second time.
+     *
+     * Static, as `IContext` is public and has `Relationships`, so a new instance member would change the public API.
+     *
+     * @param relationships - The relationships to copy
+     */
+    static copy(relationships: Relationships): Relationships;
     /**
      * Gets the count of relationships in this collection.
      * Excludes the attributes element from the count.
@@ -11258,6 +11289,7 @@ export declare class SequentialIdentifier extends Run {
  * ```xml
  * <xsd:complexType name="CT_Settings">
  *   <xsd:sequence>
+ *     <xsd:element name="embedTrueTypeFonts" type="CT_OnOff" minOccurs="0"/>
  *     <xsd:element name="trackRevisions" type="CT_OnOff" minOccurs="0"/>
  *     <xsd:element name="defaultTabStop" type="CT_TwipsMeasure" minOccurs="0"/>
  *     <xsd:element name="autoHyphenation" type="CT_OnOff" minOccurs="0"/>
@@ -12084,6 +12116,11 @@ export declare const TableLayoutType: {
  * TableOfContents creates an auto-generated list of document headings
  * with page numbers. It uses a TOC field code to generate entries.
  *
+ * Unless it is given `cachedEntries` or `contentChildren`, it is written with an
+ * entry for each heading its options include, linked to a bookmark on the heading,
+ * so it isn't empty before Word updates it or in applications that don't update it.
+ * The page numbers are left for Word to fill in when it updates the field.
+ *
  * Reference: http://officeopenxml.com/WPtableOfContents.php
  *
  * @publicApi
@@ -12108,6 +12145,8 @@ export declare const TableLayoutType: {
  * ```
  */
 export declare class TableOfContents extends FileChild {
+    /** What it is filled in with from the headings, when it isn't given its content */
+    private readonly fromHeadings?;
     constructor(alias?: string, { contentChildren, cachedEntries, beginDirty, ...properties }?: ITableOfContentsOptions & {
         readonly contentChildren?: readonly (XmlComponent | string)[];
         /**
@@ -12118,6 +12157,13 @@ export declare class TableOfContents extends FileChild {
         readonly cachedEntries?: readonly ToCEntry[];
         readonly beginDirty?: boolean;
     });
+    /**
+     * Written empty, and filled in from the headings once the body it is in is written, unless it was given its content.
+     * The page numbers are aligned to the right of the text in its section.
+     */
+    prepForXml(context: IContext): IXmlableObject | undefined;
+    /** The width of the text in the section it is in */
+    private textWidthIn;
     private getTabStopsForLevel;
     private buildCachedContentRun;
     private buildCachedContentParagraphChild;
