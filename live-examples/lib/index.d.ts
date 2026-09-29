@@ -482,13 +482,21 @@ export declare class Bookmark {
     readonly children: readonly ParagraphChild[];
     readonly end: BookmarkEnd;
     constructor(options: IBookmarkOptions);
+    /**
+     * The components written in this bookmark's place: its start, its children and its end. A bookmark in its
+     * children is written the same way, so one bookmark can hold another.
+     *
+     * @internal
+     */
+    get writtenAs(): readonly (ParagraphChild | BookmarkStart | BookmarkEnd)[];
 }
 
 /**
  * Represents the end marker of a bookmark range.
  *
  * This element marks the end of a bookmarked region in the document.
- * It must be paired with a corresponding BookmarkStart element with the same id.
+ * It must be paired with a corresponding BookmarkStart element with the same id,
+ * taken from `bookmarkUniqueNumericId` (see `BookmarkStart`).
  *
  * Reference: http://officeopenxml.com/WPbookmark.php
  *
@@ -507,7 +515,9 @@ export declare class Bookmark {
  *
  * @example
  * ```typescript
- * new BookmarkEnd(1);
+ * const id = bookmarkUniqueNumericId();
+ * new BookmarkStart("myBookmark", id);
+ * new BookmarkEnd(id);
  * ```
  */
 export declare class BookmarkEnd extends XmlComponent {
@@ -519,6 +529,10 @@ export declare class BookmarkEnd extends XmlComponent {
  *
  * This element marks the beginning of a bookmarked region in the document.
  * It must be paired with a corresponding BookmarkEnd element with the same id.
+ *
+ * The id must be unique in the document. `Bookmark` takes its ids from
+ * `bookmarkUniqueNumericId`, so take this one from it too, or it can be the
+ * same as a `Bookmark`'s.
  *
  * Reference: http://officeopenxml.com/WPbookmark.php
  *
@@ -537,7 +551,10 @@ export declare class BookmarkEnd extends XmlComponent {
  *
  * @example
  * ```typescript
- * new BookmarkStart("myBookmark", 1);
+ * // A bookmark across two paragraphs
+ * const id = bookmarkUniqueNumericId();
+ * new Paragraph({ children: [new BookmarkStart("myBookmark", id), new TextRun("First")] });
+ * new Paragraph({ children: [new TextRun("Last"), new BookmarkEnd(id)] });
  * ```
  */
 export declare class BookmarkStart extends XmlComponent {
@@ -1462,7 +1479,7 @@ declare type CoreGroupOptions = {
  * it: use it instead of alternative text for images that carry no information, such as borders and flourishes.
  */
 declare type CoreImageOptions = DrawingLinkOptions & {
-    /** Size, position, rotation, and flip settings for the image. Width and height are specified in pixels. */
+    /** Size, position, rotation, and flip settings for the image. Width and height are in pixels, at 96 to the inch, not EMUs. */
     readonly transformation: IMediaTransformation;
     /** Floating layout options. When set, the image is positioned freely on the page rather than inline with text. Controls text wrapping, overlap, anchoring, and z-order. */
     readonly floating?: IFloating;
@@ -5945,8 +5962,9 @@ export declare type IMediaTransformation = {
         readonly top?: number;
         readonly left?: number;
     };
+    /** Display width in pixels, at 96 to the inch, not EMUs. Word won't open a drawing more than 225457 pixels wide */
     readonly width: number;
-    /** Display height in pixels */
+    /** Display height in pixels, at 96 to the inch, not EMUs. Word won't open a drawing more than 225457 pixels tall */
     readonly height: number;
     /** Optional flip transformations */
     readonly flip?: {
@@ -6923,9 +6941,9 @@ export declare type IStylesOptions = {
     readonly default?: IDefaultStylesOptions;
     /** Initial base XML component for styles root element */
     readonly initialStyles?: BaseXmlComponent;
-    /** Array of custom paragraph style definitions */
+    /** Array of custom paragraph style definitions. Each takes the place of a default or external style with its id */
     readonly paragraphStyles?: readonly IParagraphStyleOptions[];
-    /** Array of custom character style definitions */
+    /** Array of custom character style definitions. Each takes the place of a default or external style with its id */
     readonly characterStyles?: readonly ICharacterStyleOptions[];
     /** Array of styles imported from external sources */
     readonly importedStyles?: readonly (XmlComponent | StyleForParagraph | StyleForCharacter | ImportedXmlComponent)[];
@@ -9652,6 +9670,7 @@ export declare class PackagePart {
     private readonly addedTo;
     /**
      * @throws If the folder isn't a single folder name, or is one of the folders docx writes parts of its own in
+     * @throws If the name or the extension isn't a single part of a file name, which could lead out of the folder
      */
     constructor(options: PackagePartOptions);
     /**
@@ -9696,7 +9715,7 @@ declare class PackageParts {
     /**
      * @param contentTypes - Where each part's content type is added
      * @param existingPaths - The paths under word/ of the parts the package already has, such as a template's charts,
-     * which new parts are numbered after
+     * which new parts don't take
      */
     constructor(contentTypes: Pick<ContentTypes, "addOverride">, existingPaths?: ReadonlySet<string>);
     /**

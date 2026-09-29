@@ -11299,13 +11299,8 @@ DOT: "dot" };
 	*/
 	var SymbolRun = class extends Run {
 		constructor(options) {
-			if (typeof options === "string") {
-				super({});
-				this.root.push(new Symbol$1(options));
-				return this;
-			}
-			super(options);
-			this.root.push(new Symbol$1(options.char, options.symbolfont));
+			super(typeof options === "string" ? {} : options);
+			this.root.push(typeof options === "string" ? new Symbol$1(options) : new Symbol$1(options.char, options.symbolfont));
 		}
 	};
 	//#endregion
@@ -14286,6 +14281,16 @@ DOT: "dot" };
 		}
 	};
 	/**
+	* Converts a crop percentage to thousandths of a percent.
+	*
+	* @throws If the percentage isn't a number from 0 to 100
+	*/
+	var cropValue = (value, edge) => {
+		if (value === void 0) return;
+		if (!(value >= 0 && value <= 100)) throw new Error(`Invalid crop ${edge} ${value}. Expected a number from 0 to 100`);
+		return Math.round(value * 1e3);
+	};
+	/**
 	* Represents a source rectangle for blip fills.
 	*
 	* This element specifies a portion of the blip (image) to use as the fill.
@@ -14312,10 +14317,10 @@ DOT: "dot" };
 		constructor(crop) {
 			super("a:srcRect");
 			if (crop) this.root.push(new SourceRectangleAttributes({
-				left: crop.left === void 0 ? void 0 : Math.round(crop.left * 1e3),
-				top: crop.top === void 0 ? void 0 : Math.round(crop.top * 1e3),
-				right: crop.right === void 0 ? void 0 : Math.round(crop.right * 1e3),
-				bottom: crop.bottom === void 0 ? void 0 : Math.round(crop.bottom * 1e3)
+				left: cropValue(crop.left, "left"),
+				top: cropValue(crop.top, "top"),
+				right: cropValue(crop.right, "right"),
+				bottom: cropValue(crop.bottom, "bottom")
 			}));
 		}
 	};
@@ -15616,6 +15621,18 @@ EXTERNAL: "External" };
 	* @module
 	*/
 	/**
+	* The largest width or height, in EMUs, Word opens a drawing at. The standard allows `ST_PositiveCoordinate` up to
+	* 27273042316900, but Word and PowerPoint restrict it to 2147483647 and won't open a document with a larger drawing.
+	*
+	* Reference: [MS-OI29500] Part 1 Section 20.1.10.42, ST_PositiveCoordinate
+	*/
+	var MAX_EXTENT = 2147483647;
+	var EMUS_PER_PIXEL = 9525;
+	var checkExtent = (dimension, value) => {
+		if (value !== void 0 && value > MAX_EXTENT) throw new Error(`Invalid drawing ${dimension} ${value} EMUs (${Math.round(value / EMUS_PER_PIXEL)} pixels). Word won't open a drawing with a ${dimension} over ${MAX_EXTENT} EMUs (${Math.floor(MAX_EXTENT / EMUS_PER_PIXEL)} pixels). Sizes such as an ImageRun's transformation are in pixels, not EMUs`);
+		return value;
+	};
+	/**
 	* Creates an extent element for inline drawings.
 	*
 	* This element specifies the extents of the parent DrawingML object within
@@ -15639,17 +15656,19 @@ EXTERNAL: "External" };
 	*   y: 914400
 	* });
 	* ```
+	*
+	* @throws Error if the width or height is over 2147483647 EMUs, which Word won't open
 	*/
 	var createExtent = ({ x, y }) => new BuilderElement({
 		name: "wp:extent",
 		attributes: {
 			x: {
 				key: "cx",
-				value: x
+				value: checkExtent("width", x)
 			},
 			y: {
 				key: "cy",
-				value: y
+				value: checkExtent("height", y)
 			}
 		}
 	});
@@ -16041,7 +16060,6 @@ EXTERNAL: "External" };
 	var ImageRun = class extends XmlComponent {
 		constructor(options) {
 			var _options$insertion;
-			var _super = (..._args) => (super(..._args), _defineProperty(this, "imageData", void 0), this);
 			const key = `${hashedId(options.data)}.${options.type}`;
 			const imageData = options.type === "svg" ? _objectSpread2(_objectSpread2({ type: options.type }, createImageData(options, key)), {}, { fallback: _objectSpread2({ type: options.fallback.type }, createImageData(_objectSpread2(_objectSpread2({}, options.fallback), {}, { transformation: options.transformation }), `${hashedId(options.fallback.data)}.${options.fallback.type}`)) }) : _objectSpread2({ type: options.type }, createImageData(options, key));
 			const drawing = new Drawing(imageData, {
@@ -16055,8 +16073,10 @@ EXTERNAL: "External" };
 			});
 			const properties = new RunProperties(options.run);
 			const revision = (_options$insertion = options.insertion) !== null && _options$insertion !== void 0 ? _options$insertion : options.deletion;
+			const rootName = options.insertion ? "w:ins" : options.deletion ? "w:del" : "w:r";
+			super(rootName);
+			_defineProperty(this, "imageData", void 0);
 			if (revision) {
-				_super(options.insertion ? "w:ins" : "w:del");
 				this.root.push(new ChangeAttributes({
 					id: revision.id,
 					author: revision.author,
@@ -16068,7 +16088,6 @@ EXTERNAL: "External" };
 				});
 				this.addChildElement(options.insertion && options.deletion ? createDeletion(options.deletion, run) : run);
 			} else {
-				_super("w:r");
 				this.root.push(properties);
 				this.root.push(drawing);
 			}
@@ -16442,6 +16461,7 @@ EXTERNAL: "External" };
 		constructor(..._args3) {
 			super(..._args3);
 			_defineProperty(this, "xmlKeys", {
+				"xmlns:wpc": "xmlns:wpc",
 				"xmlns:cx": "xmlns:cx",
 				"xmlns:cx1": "xmlns:cx1",
 				"xmlns:cx2": "xmlns:cx2",
@@ -16682,6 +16702,7 @@ EXTERNAL: "External" };
 			_defineProperty(this, "isEmpty", void 0);
 			this.isEmpty = children.length === 0;
 			this.root.push(new RootCommentsAttributes({
+				"xmlns:wpc": "http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas",
 				"xmlns:cx": "http://schemas.microsoft.com/office/drawing/2014/chartex",
 				"xmlns:cx1": "http://schemas.microsoft.com/office/drawing/2015/9/8/chartex",
 				"xmlns:cx2": "http://schemas.microsoft.com/office/drawing/2015/10/21/chartex",
@@ -18048,7 +18069,7 @@ MAX: 9026 };
 	* });
 	* ```
 	*/
-	var Bookmark = class {
+	var Bookmark = class Bookmark {
 		constructor(options) {
 			_defineProperty(this, "start", void 0);
 			_defineProperty(this, "children", void 0);
@@ -18058,12 +18079,29 @@ MAX: 9026 };
 			this.children = options.children;
 			this.end = new BookmarkEnd(linkId);
 		}
+		/**
+		* The components written in this bookmark's place: its start, its children and its end. A bookmark in its
+		* children is written the same way, so one bookmark can hold another.
+		*
+		* @internal
+		*/
+		get writtenAs() {
+			return [
+				this.start,
+				...this.children.flatMap((child) => child instanceof Bookmark ? child.writtenAs : [child]),
+				this.end
+			];
+		}
 	};
 	/**
 	* Represents the start marker of a bookmark range.
 	*
 	* This element marks the beginning of a bookmarked region in the document.
 	* It must be paired with a corresponding BookmarkEnd element with the same id.
+	*
+	* The id must be unique in the document. `Bookmark` takes its ids from
+	* `bookmarkUniqueNumericId`, so take this one from it too, or it can be the
+	* same as a `Bookmark`'s.
 	*
 	* Reference: http://officeopenxml.com/WPbookmark.php
 	*
@@ -18082,7 +18120,10 @@ MAX: 9026 };
 	*
 	* @example
 	* ```typescript
-	* new BookmarkStart("myBookmark", 1);
+	* // A bookmark across two paragraphs
+	* const id = bookmarkUniqueNumericId();
+	* new Paragraph({ children: [new BookmarkStart("myBookmark", id), new TextRun("First")] });
+	* new Paragraph({ children: [new TextRun("Last"), new BookmarkEnd(id)] });
 	* ```
 	*/
 	var BookmarkStart = class extends XmlComponent {
@@ -18099,7 +18140,8 @@ MAX: 9026 };
 	* Represents the end marker of a bookmark range.
 	*
 	* This element marks the end of a bookmarked region in the document.
-	* It must be paired with a corresponding BookmarkStart element with the same id.
+	* It must be paired with a corresponding BookmarkStart element with the same id,
+	* taken from `bookmarkUniqueNumericId` (see `BookmarkStart`).
 	*
 	* Reference: http://officeopenxml.com/WPbookmark.php
 	*
@@ -18118,7 +18160,9 @@ MAX: 9026 };
 	*
 	* @example
 	* ```typescript
-	* new BookmarkEnd(1);
+	* const id = bookmarkUniqueNumericId();
+	* new BookmarkStart("myBookmark", id);
+	* new BookmarkEnd(id);
 	* ```
 	*/
 	var BookmarkEnd = class extends XmlComponent {
@@ -19104,9 +19148,7 @@ MAX: 9026 };
 			if (options.text) this.root.push(new TextRun(options.text));
 			if (options.children) for (const child of options.children) {
 				if (child instanceof Bookmark) {
-					this.root.push(child.start);
-					for (const textRun of child.children) this.root.push(textRun);
-					this.root.push(child.end);
+					this.root.push(...child.writtenAs);
 					continue;
 				}
 				this.root.push(child);
@@ -27015,6 +27057,7 @@ MAX: 9026 };
 	};
 	//#endregion
 	//#region src/file/package-part/package-part.ts
+	var PATH_PART = /^[\w-]+$/;
 	var RESERVED_FOLDERS = /* @__PURE__ */ new Set([
 		"_rels",
 		"fonts",
@@ -27053,6 +27096,7 @@ MAX: 9026 };
 	var PackagePart = class {
 		/**
 		* @throws If the folder isn't a single folder name, or is one of the folders docx writes parts of its own in
+		* @throws If the name or the extension isn't a single part of a file name, which could lead out of the folder
 		*/
 		constructor(options) {
 			_defineProperty(this, "options", void 0);
@@ -27065,7 +27109,9 @@ MAX: 9026 };
 			);
 			_defineProperty(this, "addedTo", /* @__PURE__ */ new WeakSet());
 			this.options = options;
-			if (!/^[\w-]+$/.test(options.folder) || RESERVED_FOLDERS.has(options.folder)) throw new Error(`Invalid package part folder "${options.folder}". Expected a folder name docx doesn't use, such as "charts"`);
+			if (!PATH_PART.test(options.folder) || RESERVED_FOLDERS.has(options.folder)) throw new Error(`Invalid package part folder "${options.folder}". Expected a folder name docx doesn't use, such as "charts"`);
+			if (!PATH_PART.test(options.name)) throw new Error(`Invalid package part name "${options.name}". Expected letters, digits, "_" and "-", such as "chart"`);
+			if (!PATH_PART.test(options.extension)) throw new Error(`Invalid package part extension "${options.extension}". Expected letters, digits, "_" and "-", such as "xml"`);
 		}
 		/**
 		* Adds the part to the package being written, once, and a relationship to it from the part being written.
@@ -27087,7 +27133,7 @@ MAX: 9026 };
 		/**
 		* @param contentTypes - Where each part's content type is added
 		* @param existingPaths - The paths under word/ of the parts the package already has, such as a template's charts,
-		* which new parts are numbered after
+		* which new parts don't take
 		*/
 		constructor(contentTypes, existingPaths = /* @__PURE__ */ new Set()) {
 			_defineProperty(this, "contentTypes", void 0);
@@ -29063,16 +29109,20 @@ MAX: 9026 };
 			});
 			this.media = new Media();
 			if (options.externalStyles !== void 0) {
-				var _options$styles$defau, _options$styles;
+				var _options$styles$defau, _options$styles, _options$styles2, _options$styles3;
 				const given = (_options$styles$defau = (_options$styles = options.styles) === null || _options$styles === void 0 ? void 0 : _options$styles.default) !== null && _options$styles$defau !== void 0 ? _options$styles$defau : {};
 				const defaultStyles = Object.entries(createDefaultStyles(given));
 				const isGiven = ([key]) => given[key] !== void 0;
 				const externalStyles = new ExternalStylesFactory().newInstance(options.externalStyles);
-				this.styles = new Styles(_objectSpread2(_objectSpread2({}, externalStyles), {}, { importedStyles: [
-					...defaultStyles.filter((entry) => !isGiven(entry)).map(([, style]) => style),
-					...externalStyles.importedStyles,
-					...defaultStyles.filter(isGiven).map(([, style]) => style)
-				] }));
+				this.styles = new Styles(_objectSpread2(_objectSpread2({}, externalStyles), {}, {
+					paragraphStyles: (_options$styles2 = options.styles) === null || _options$styles2 === void 0 ? void 0 : _options$styles2.paragraphStyles,
+					characterStyles: (_options$styles3 = options.styles) === null || _options$styles3 === void 0 ? void 0 : _options$styles3.characterStyles,
+					importedStyles: [
+						...defaultStyles.filter((entry) => !isGiven(entry)).map(([, style]) => style),
+						...externalStyles.importedStyles,
+						...defaultStyles.filter(isGiven).map(([, style]) => style)
+					]
+				}));
 			} else if (options.styles) {
 				const defaultStyles = new DefaultStylesFactory().newInstance(options.styles.default);
 				this.styles = new Styles(_objectSpread2(_objectSpread2({}, defaultStyles), options.styles));
@@ -34579,6 +34629,55 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 	};
 	_defineProperty(Packer, "compiler", new Compiler());
 	//#endregion
+	//#region src/patcher/bookmark-ids.ts
+	var bookmarkIdOf = (element) => {
+		var _element$attributes;
+		if (element.name !== "w:bookmarkStart" && element.name !== "w:bookmarkEnd") return;
+		const id = Number((_element$attributes = element.attributes) === null || _element$attributes === void 0 ? void 0 : _element$attributes["w:id"]);
+		return Number.isInteger(id) ? id : void 0;
+	};
+	/**
+	* Finds the id of every bookmark in an element, at any depth.
+	*
+	* @param element - The element to search, such as a part's root
+	* @returns The ids, once for each bookmarkStart and bookmarkEnd
+	*/
+	var findBookmarkIds = (element) => {
+		var _element$elements;
+		const id = bookmarkIdOf(element);
+		return [...id === void 0 ? [] : [id], ...((_element$elements = element.elements) !== null && _element$elements !== void 0 ? _element$elements : []).flatMap(findBookmarkIds)];
+	};
+	/**
+	* Creates a function that renumbers the bookmarks in content being inserted, so none takes an id the document
+	* already uses. Bookmark ids must be unique within a document, but a bookmark's id is chosen when it is created,
+	* without knowing which ids the template has.
+	*
+	* A bookmark keeps its id if nothing in the document uses it yet, and otherwise gets the next unused one. An id is
+	* renumbered the same way each time, so a bookmark's start and end still share one, even in separate patches.
+	*
+	* @param idsInDocument - The ids of the bookmarks already in the document
+	* @returns A function that returns the elements with their bookmarks renumbered
+	*/
+	var renumberBookmarksAvoiding = (idsInDocument) => {
+		const usedIds = new Set(idsInDocument);
+		const newIds = /* @__PURE__ */ new Map();
+		let highestId = idsInDocument.reduce((highest, id) => Math.max(highest, id), 0);
+		const newIdFor = (id) => {
+			const knownId = newIds.get(id);
+			if (knownId !== void 0) return knownId;
+			const newId = usedIds.has(id) ? highestId + 1 : id;
+			highestId = Math.max(highestId, newId);
+			usedIds.add(newId);
+			newIds.set(id, newId);
+			return newId;
+		};
+		const renumber = (element) => {
+			const id = bookmarkIdOf(element);
+			return _objectSpread2(_objectSpread2(_objectSpread2({}, element), id === void 0 ? {} : { attributes: _objectSpread2(_objectSpread2({}, element.attributes), {}, { "w:id": String(newIdFor(id)) }) }), element.elements === void 0 ? {} : { elements: element.elements.map(renumber) });
+		};
+		return (elements) => elements.map(renumber);
+	};
+	//#endregion
 	//#region src/patcher/util.ts
 	/**
 	* Utility functions for XML manipulation in document patching.
@@ -35374,9 +35473,10 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 	* @param context - The document context for formatting
 	* @param keepOriginalStyles - Whether to preserve original text formatting
 	* @param recursive - Whether to replace every occurrence in a paragraph, rather than only the first
+	* @param renumberBookmarks - Renumbers the bookmarks the patch inserts, so they don't take an id the document uses
 	* @returns Result containing the modified element and whether a replacement occurred
 	*/
-	var replacer = ({ json, patch, patchText, context, keepOriginalStyles = true, recursive = true }) => {
+	var replacer = ({ json, patch, patchText, context, keepOriginalStyles = true, recursive = true, renumberBookmarks = (elements) => elements }) => {
 		const renderedParagraphs = findLocationOfText(json, patchText);
 		if (renderedParagraphs.length === 0) return {
 			element: json,
@@ -35388,7 +35488,7 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 			case PatchType.DOCUMENT: {
 				const parentElement = goToParentElementFromPath(json, renderedParagraph.pathToParagraph);
 				const elementIndex = getLastElementIndexFromPath(renderedParagraph.pathToParagraph);
-				parentElement.elements.splice(elementIndex, 1, ...formatChildren(patch, context));
+				parentElement.elements.splice(elementIndex, 1, ...formatChildren(patch, context, renumberBookmarks));
 				break;
 			}
 			case PatchType.PARAGRAPH:
@@ -35402,7 +35502,7 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 						renderedParagraph: paragraph,
 						patchText,
 						fromIndex,
-						children: formatChildren(patch, context),
+						children: formatChildren(patch, context, renumberBookmarks),
 						keepOriginalStyles
 					});
 					paragraph = renderParagraphNode({
@@ -35420,10 +35520,10 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 			didFindOccurrence: true
 		};
 	};
-	var formatChildren = (patch, context) => patch.children.flatMap((c) => {
+	var formatChildren = (patch, context, renumberBookmarks) => renumberBookmarks(patch.children.flatMap((c) => {
 		var _c$writtenAs;
 		return (_c$writtenAs = c.writtenAs) !== null && _c$writtenAs !== void 0 ? _c$writtenAs : c;
-	}).map((c) => toJson((0, import_xml.default)(formatter.format(c, context)))).map((c) => c.elements[0]);
+	}).map((c) => toJson((0, import_xml.default)(formatter.format(c, context)))).map((c) => c.elements[0]));
 	/**
 	* Replaces the first occurrence of the placeholder from `fromIndex` on, splitting the run it starts in.
 	*
@@ -35596,7 +35696,7 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 				return ((_item$attributes3 = item.attributes) === null || _item$attributes3 === void 0 ? void 0 : _item$attributes3.Type) === THEME_RELATIONSHIP_TYPE;
 			});
 			const target = theme === null || theme === void 0 || (_theme$attributes = theme.attributes) === null || _theme$attributes === void 0 ? void 0 : _theme$attributes.Target;
-			return typeof target === "string" ? readPart(zip, target.startsWith("/") ? target.slice(1) : `word/${target}`) : void 0;
+			return typeof target === "string" ? readPart(zip, resolveTarget("word/document.xml", target)) : void 0;
 		});
 		return function readTheme(_x3) {
 			return _ref2.apply(this, arguments);
@@ -35731,6 +35831,7 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 				}
 				map.set(key, json);
 			}
+			const renumberBookmarks = renumberBookmarksAvoiding([...map.values()].flatMap(findBookmarkIds));
 			const createContext = (key) => ({
 				file,
 				viewWrapper: { Relationships: { addRelationship: (id, type, target, targetMode) => {
@@ -35763,7 +35864,7 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 					const patchText = `${start}${patchKey}${end}`;
 					replacer({
 						json,
-						patch: _objectSpread2(_objectSpread2({}, patchValue), {}, { children: patchValue.children.map((element) => {
+						patch: _objectSpread2(_objectSpread2({}, patchValue), {}, { children: patchValue.children.flatMap((element) => element instanceof Bookmark ? element.writtenAs : [element]).map((element) => {
 							if (element instanceof ExternalHyperlink) {
 								const concreteHyperlink = new ConcreteHyperlink(element.options.children, uniqueId());
 								relationshipAdditions.push({
@@ -35779,7 +35880,8 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 						patchText,
 						context,
 						keepOriginalStyles,
-						recursive
+						recursive,
+						renumberBookmarks
 					});
 				}
 				const mediaDatas = imageReplacer.getMediaData(JSON.stringify(json), context.file.Media);
@@ -35844,12 +35946,13 @@ while (n === a[++i] && n === a[++i] && n === a[++i] && n === a[++i] && n === a[+
 		};
 	}();
 	/**
-	* The element with an extra escape on each "&" in its text. xml-js reads "&amp;" in text as an "&" already escaped, and
-	* would write a text's literal "&amp;", such as in a document about HTML, as "&".
+	* The element with an extra escape on each "&" in its text and attributes. xml-js reads "&amp;" in text as an "&"
+	* already escaped, and would write a text's literal "&amp;", such as in a document about HTML, as "&". It escapes the
+	* quotes in an attribute before `attributeValueFn` is given it, so that can't tell its "&quot;" from a literal one.
 	*/
-	var withAmpersandsEscaped = (element) => _objectSpread2(_objectSpread2({}, element), element.elements === void 0 ? {} : { elements: element.elements.map((child) => child.type === "text" ? _objectSpread2(_objectSpread2({}, child), {}, { text: String(child.text).replace(/&/g, "&amp;") }) : withAmpersandsEscaped(child)) });
+	var withAmpersandsEscaped = (element) => _objectSpread2(_objectSpread2(_objectSpread2({}, element), element.attributes === void 0 ? {} : { attributes: Object.fromEntries(Object.entries(element.attributes).map(([key, value]) => [key, value === void 0 ? value : String(value).replace(/&/g, "&amp;")])) }), element.elements === void 0 ? {} : { elements: element.elements.map((child) => child.type === "text" ? _objectSpread2(_objectSpread2({}, child), {}, { text: String(child.text).replace(/&/g, "&amp;") }) : withAmpersandsEscaped(child)) });
 	var toXml = (jsonObj) => {
-		return (0, import_lib.js2xml)(withAmpersandsEscaped(jsonObj), { attributeValueFn: (str) => String(str).replace(/&(?!amp;|lt;|gt;|quot;|apos;)/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;") });
+		return (0, import_lib.js2xml)(withAmpersandsEscaped(jsonObj), { attributeValueFn: (str) => String(str).replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/'/g, "&apos;") });
 	};
 	//#endregion
 	//#region src/patcher/patch-detector.ts
